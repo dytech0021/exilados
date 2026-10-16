@@ -418,6 +418,33 @@ button.ao-vivo:hover { background: var(--vermelho-escuro); }
 .live .barra .controles-som[hidden] { display: none; }
 .live .barra .rotulo { font-size: 14px; color: rgba(255, 255, 255, .85); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 
+/* Lives destacadas continuam tocando enquanto a pessoa usa o resto do grupo. */
+.janela-live {
+  position: fixed; display: flex; flex-direction: column; overflow: hidden; border-radius: 6px;
+  background: #000; box-shadow: 0 12px 34px rgba(0, 0, 0, .62), 0 0 0 1px rgba(255, 255, 255, .18);
+  touch-action: none; container-type: inline-size;
+}
+.janela-live-titulo {
+  height: 32px; flex: none; display: flex; align-items: center; gap: 4px; padding: 0 20px 0 12px;
+  background: var(--flutuante); color: var(--texto-forte); cursor: move; user-select: none;
+}
+.janela-live-nome { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 13px; font-weight: 600; }
+.janela-live-titulo .botao-icone { width: 26px; height: 26px; }
+.janela-live .live { flex: 1; min-height: 0; }
+.janela-live .live video { height: 100%; }
+.janela-live .live .barra { gap: 5px; padding: 5px 20px; }
+.janela-live .live .barra input[type="range"] { width: min(90px, 18vw); }
+.janela-live .live .barra .assistindo { font-size: 12px; }
+@container (max-width: 320px) {
+  .live .barra .assistindo { display: none; }
+  .live .barra input[type="range"] { width: 65px; }
+}
+.janela-live-canto { position: absolute; width: 17px; height: 17px; z-index: 2; touch-action: none; }
+.janela-live-canto.nw { top: 0; left: 0; cursor: nwse-resize; }
+.janela-live-canto.ne { top: 0; right: 0; cursor: nesw-resize; }
+.janela-live-canto.sw { bottom: 0; left: 0; cursor: nesw-resize; }
+.janela-live-canto.se { bottom: 0; right: 0; cursor: nwse-resize; }
+
 /* ---------- avisos, menus e janelas ---------- */
 
 #avisos { position: fixed; right: 16px; bottom: 16px; z-index: 300; display: flex; flex-direction: column; gap: 8px; max-width: calc(100vw - 32px); }

@@ -13,7 +13,7 @@ import {
   agoraServidor, avisar, estado, meuId, nomeDe, ouvir,
 } from './estado.js';
 import { cartaoPerfil, desenharSalas, desenharTopoGrupo, iniciarGrupo } from './grupo.js';
-import { fecharLive, montarLive } from './live.js';
+import { fecharLive, fecharTodasLives, haLivesAbertas, montarLive } from './live.js';
 import { liveNoAr } from './presenca.js';
 import {
   atualizarPrograma, iniciarPrograma, noPrograma, quandoAtualizacao,
@@ -128,7 +128,7 @@ function desenharCentro() {
     limpar(topo, botaoMenu(),
       el('div', { class: 'titulo' }, avatar(m, { tamanho: 24 }), el('span', { text: m.nome }), el('span', { class: 'ao-vivo', text: 'Ao vivo' })),
       botaoMembros(), botaoIcone('fechar', 'Fechar a live', voltar));
-    montarLive(partes.centro, v.id, voltar);
+    montarLive(partes.centro, v.id, voltar, () => irPara({ tipo: 'live', id: v.id }));
     return;
   }
   if (v.tipo === 'tela') {
@@ -253,7 +253,7 @@ function acompanhar() {
   });
   ouvir('removido', async () => {
     await voz.sair().catch(() => {});
-    fecharLive();
+    fecharTodasLives();
     fecharTela();
     telaAviso('Você não faz mais parte do Exilados', 'Sua entrada no grupo foi desfeita pelo dono. Só ele pode te readmitir.', estado.eu);
   });
@@ -296,7 +296,7 @@ async function abrirApp() {
 }
 
 /** Numa sala de voz ou assistindo a algo: o programa não reinicia sem perguntar. */
-const ocupado = () => voz.voz.situacao !== 'desligada' || assistindo(estado.vista?.tipo);
+const ocupado = () => voz.voz.situacao !== 'desligada' || assistindo(estado.vista?.tipo) || haLivesAbertas();
 
 /**
  * Botão de baixar o programa no trilho (como o "Baixar aplicativos" do Discord): só no Windows e fora do próprio

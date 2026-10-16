@@ -56,6 +56,7 @@ const ICONES = {
   certo: T('M5 12.5l4.5 4.5L19 7'),
   olho: T('M2.5 12S6 5.5 12 5.5 21.5 12 21.5 12 18 18.5 12 18.5 2.5 12 2.5 12z') + '<circle cx="12" cy="12" r="3"/>',
   telaCheia: T('M4 9V4h5M15 4h5v5M20 15v5h-5M9 20H4v-5'),
+  abrirJanela: T('M4 5h16v14H4zM9 9h11M9 9v10'),
   sairTelaCheia: T('M9 4v5H4M20 9h-5V4M15 20v-5h5M4 15h5v5'),
   som: F('M3 9.5h4l5-4.2v13.4l-5-4.2H3z') + T('M15.5 9a4 4 0 0 1 0 6M18 6.5a7.5 7.5 0 0 1 0 11'),
   semSom: F('M3 9.5h4l5-4.2v13.4l-5-4.2H3z') + T('M16 9.5l5 5M21 9.5l-5 5'),
