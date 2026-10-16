@@ -38,6 +38,8 @@ if [ ! -f /etc/exilados/api.env ]; then
   umask 022
 fi
 chmod 600 /etc/exilados/api.env
+# As lives do Ponte acabaram (1.11.0): nada mais é repassado ao relay dele.
+sed -i 's|^RELAY_AUTH=.*|RELAY_AUTH=|' /etc/exilados/api.env
 IP_PUBLICO="$(ip -4 -o addr show scope global | awk '{print $4}' | cut -d/ -f1 | head -1)"
 ( umask 077
   sed -e "s|<CHAVE>|$(valor LIVEKIT_CHAVE)|" -e "s|<SEGREDO>|$(valor LIVEKIT_SEGREDO)|" -e "s|<IP_PUBLICO>|$IP_PUBLICO|" \
@@ -114,16 +116,10 @@ fi
 systemctl reload nginx
 
 passo "MediaMTX"
-# O MediaMTX relê o arquivo sozinho, e trocar a autorização derruba as lives no ar: com alguma live acontecendo,
-# a mudança fica para a próxima publicação (ou FORCAR_MEDIAMTX=1).
-NOVO=/tmp/exilados-mediamtx.yml
+# A configuração vem de servidor/mediamtx/mediamtx.yml. Trocar a autorização ou os caminhos derruba as lives no ar:
+# com alguma live acontecendo, a mudança fica para a próxima publicação (ou FORCAR_MEDIAMTX=1).
+NOVO="$AQUI/servidor/mediamtx/mediamtx.yml"
 ANTERIOR=/tmp/exilados-mediamtx-anterior.yml
-cp "$MEDIAMTX_YML" "$NOVO"
-sed -i 's|^authHTTPAddress: http://127.0.0.1:7414/mediamtx/auth$|authHTTPAddress: http://127.0.0.1:7416/mediamtx/auth|' "$NOVO"
-if ! grep -qF '"~^ex/' "$NOVO"; then
-  [ -n "$(tail -c1 "$NOVO")" ] && echo >> "$NOVO"
-  printf '%s\n' '  # Lives do Exilados (o caminho é sorteado pelo exilados-api).' '  "~^ex/[A-Za-z0-9]{24}$":' >> "$NOVO"
-fi
 NO_AR="$(curl -fsS http://127.0.0.1:9997/v3/paths/list 2>/dev/null | grep -o '"itemCount":[0-9]*' | cut -d: -f2 || true)"
 if cmp -s "$MEDIAMTX_YML" "$NOVO"; then
   echo "Já configurado."
@@ -132,7 +128,7 @@ elif [ "${NO_AR:-0}" != 0 ] && [ "${FORCAR_MEDIAMTX:-0}" != 1 ]; then
 else
   [ -f /etc/mediamtx/mediamtx.yml.antes-exilados ] || cp "$MEDIAMTX_YML" /etc/mediamtx/mediamtx.yml.antes-exilados
   cp "$MEDIAMTX_YML" "$ANTERIOR"
-  cp "$NOVO" "$MEDIAMTX_YML"
+  install -m 0644 "$NOVO" "$MEDIAMTX_YML"
   systemctl restart mediamtx
   sleep 2
   if ! systemctl is-active --quiet mediamtx || ! curl -fsS -o /dev/null http://127.0.0.1:9997/v3/paths/list; then
@@ -143,7 +139,7 @@ else
     exit 1
   fi
 fi
-rm -f "$NOVO" "$ANTERIOR" /tmp/exilados-nginx.txt
+rm -f "$ANTERIOR" /tmp/exilados-nginx.txt
 
 passo "Pronto"
 sleep 1

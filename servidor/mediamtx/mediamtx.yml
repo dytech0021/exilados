@@ -1,0 +1,55 @@
+# Servidor de mídia das lives do Exilados (MediaMTX). Fica em /etc/mediamtx/mediamtx.yml; o instalar.sh o
+# instala daqui quando não há live no ar. O que não está aqui vale o padrão do MediaMTX.
+#
+# O programa Exilados para Windows envia por RTSPS (porta 8322, cifrado com o certificado do site) e os membros
+# assistem por WebRTC (WHEP, porta 8189 UDP ou TCP), pelo nginx em https://filabox3d.com.br/exilados/ao-vivo/.
+# Quem pode enviar ou assistir é decidido pelo exilados-api (127.0.0.1:7416): envio só com a senha da live,
+# leitura só com a permissão de assistir que ele entrega a membros ativos.
+
+logLevel: info
+logDestinations: [stdout]
+readTimeout: 10s
+writeTimeout: 10s
+writeQueueSize: 512
+
+authMethod: http
+authHTTPAddress: http://127.0.0.1:7416/mediamtx/auth
+authHTTPExclude: []
+
+# Só para o exilados-api contar quem está assistindo e derrubar um envio.
+api: true
+apiAddress: 127.0.0.1:9997
+metrics: false
+pprof: false
+playback: false
+
+# Entrada do programa: só RTSP cifrado, só por TCP.
+rtsp: true
+rtspTransports: [tcp]
+rtspEncryption: "strict"
+rtspAddress: 127.0.0.1:8554
+rtspsAddress: :8322
+rtspServerKey: /etc/mediamtx/privkey.pem
+rtspServerCert: /etc/mediamtx/fullchain.pem
+rtspAuthMethods: [basic]
+
+rtmp: false
+srt: false
+moq: false
+hls: false
+
+webrtc: true
+webrtcAddress: 127.0.0.1:8889
+webrtcAllowOrigins: ["https://filabox3d.com.br"]
+webrtcTrustedProxies: ["127.0.0.1"]
+webrtcLocalUDPAddress: :8189
+webrtcLocalTCPAddress: :8189
+webrtcIPsFromInterfaces: true
+webrtcIPsFromInterfacesList: [enX0]
+
+pathDefaults:
+  maxReaders: 20
+
+# Só existem os caminhos das lives: ex/ e o código de 24 letras e números sorteado pelo exilados-api.
+paths:
+  "~^ex/[A-Za-z0-9]{24}$":

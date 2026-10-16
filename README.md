@@ -14,11 +14,13 @@ Lugar do grupo para conversar por texto e voz e assistir às lives uns dos outro
 | `site/` | O site: HTML, CSS e JavaScript, sem etapa de compilação. Bibliotecas em `site/vendor/`. |
 | `api/` | exilados-api: Node 24, sem pacotes externos. Permissões de voz e de live. |
 | `banco/` | Tabelas, regras de acesso e funções no Supabase. |
-| `servidor/` | LiveKit, nginx, serviços e o roteiro de instalação. |
+| `servidor/` | LiveKit, MediaMTX, nginx, serviços e o roteiro de instalação. |
+| `ferramentas/` | Modo de demonstração do site (sem contas) e geração dos ícones. |
 | `windows/` | Programa Exilados para Windows (C# / .NET 10). |
 | `docs/` | Especificação, plano, desenho e operação. |
 
-A especificação está em [docs/superpowers/specs/2026-10-15-exilados-design.md](docs/superpowers/specs/2026-10-15-exilados-design.md).
+A especificação está em [docs/superpowers/specs/2026-10-15-exilados-design.md](docs/superpowers/specs/2026-10-15-exilados-design.md);
+publicar, conferir e o roteiro de ponta a ponta, em [docs/operacao.md](docs/operacao.md).
 
 Nenhuma chave, senha ou token fica neste repositório: as do servidor ficam no servidor, e a que assina as
 atualizações do programa fica com o dono.
