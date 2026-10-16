@@ -3,9 +3,9 @@ import { nomeDaSala } from './dados.js';
 import {
   agoraServidor, amizadeCom, estado, eu, meuId, membrosAtivos, ouvir, souDono,
 } from './estado.js';
-import { dataPorExtenso, ordenarPorNome } from './formato.js';
+import { dataPorExtenso, formatarId, ordenarPorNome } from './formato.js';
 import { liveNoAr } from './presenca.js';
-import { api } from './supa.js';
+import { api, sb } from './supa.js';
 import {
   aoSegurar, avatar, botaoIcone, confirmar, el, erro, icone, limpar, menu, posicionar,
 } from './ui.js';
@@ -86,10 +86,10 @@ export function desenharSalas(lista) {
 }
 
 export function desenharTopoGrupo(topo) {
-  limpar(topo, el('button', {
-    class: 'lateral-topo',
-    onclick: (e) => {
-      const r = e.currentTarget.getBoundingClientRect();
+  const titulo = el('button', {
+    class: 'lateral-topo-titulo',
+    onclick: () => {
+      const r = topo.getBoundingClientRect();
       menu([
         { rotulo: 'Convidar pessoas', icone: 'addAmigo', fn: () => nav.convidar() },
         { rotulo: 'Transmitir (programa do Windows)', icone: 'tela', fn: () => nav.abrirConfig('transmitir') },
@@ -97,7 +97,9 @@ export function desenharTopoGrupo(topo) {
         souDono() ? { rotulo: 'Membros do grupo', icone: 'pessoas', fn: () => nav.abrirConfig('membros') } : null,
       ], r.left + 10, r.bottom + 6);
     },
-  }, el('span', { class: 'titulo', text: 'Exilados' }), icone('abaixo')));
+  }, el('span', { class: 'titulo', text: 'Exilados' }), icone('abaixo'));
+  limpar(topo, el('div', { class: 'lateral-topo' }, titulo,
+    botaoIcone('addAmigo', 'Convidar pessoas (link ou ID)', () => nav.convidar(), 'convidar')));
 }
 
 // ---------- lista de membros ----------
@@ -133,6 +135,7 @@ export function desenharMembros(coluna) {
   const online = ordenarPorNome(ativos.filter((m) => statusDe(m.user_id) !== 'offline'));
   const offline = ordenarPorNome(ativos.filter((m) => statusDe(m.user_id) === 'offline'));
   limpar(coluna,
+    el('button', { class: 'botao pequeno convidar-membros', onclick: () => nav.convidar() }, icone('addAmigo'), 'Convidar pessoas'),
     el('div', { class: 'categoria', text: `Online — ${online.length}` }), online.map(itemMembro),
     offline.length ? [el('div', { class: 'categoria', text: `Offline — ${offline.length}` }), offline.map(itemMembro)] : null);
 }
@@ -185,12 +188,17 @@ export function cartaoPerfil(id, x, y) {
   const souEu = id === meuId();
   const faixa = el('div', { class: 'faixa-cor' });
   faixa.style.backgroundColor = '#c0662b';
+  // O ID de cada membro (para achar amigos pelo número); carregado à parte.
+  const linhaId = el('div', { class: 'papel' });
+  sb.from('exilados_ids').select('codigo').eq('user_id', id).maybeSingle()
+    .then(({ data }) => { if (data?.codigo) linhaId.textContent = `ID ${formatarId(data.codigo)}`; });
   const cartao = el('div', { class: 'cartao-perfil' },
     faixa,
     el('div', { class: 'corpo' },
       avatar(m, { tamanho: 80, status: statusDe(id) }),
       el('h3', {}, el('span', { text: m.nome }), m.papel === 'dono' ? icone('coroa', 'coroa') : null),
       el('div', { class: 'papel', text: `${m.papel === 'dono' ? 'Dono do grupo' : 'Membro'} desde ${dataPorExtenso(m.entrou_em)}` }),
+      linhaId,
       el('div', { class: 'acoes' },
         live ? el('button', { class: 'botao vermelho', text: 'Assistir à live', onclick: () => nav.irPara({ tipo: 'live', id }) }) : null,
         souEu ? el('button', { class: 'botao cinza', text: 'Editar perfil', onclick: () => nav.abrirConfig('conta') }) : botaoAmizade(id),

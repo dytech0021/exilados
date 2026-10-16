@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import {
-  agruparMensagens, carimbo, corDoId, dataPorExtenso, inicial, limparNome, mensagemValida, partesDoTexto,
+  agruparMensagens, carimbo, corDoId, dataPorExtenso, formatarId, inicial, lerId, limparNome, mensagemValida, partesDoTexto,
 } from '../js/formato.js';
 
 test('links viram partes próprias, sem a pontuação do fim da frase', () => {
@@ -58,4 +58,13 @@ test('foto padrão: inicial e cor fixas por conta', () => {
   assert.equal(inicial(''), '?');
   assert.equal(corDoId('abc'), corDoId('abc'));
   assert.match(corDoId('xyz'), /^#[0-9A-F]{6}$/);
+});
+
+test('ID da conta: mostrado em três grupos e lido com espaços, pontos ou traços', () => {
+  assert.equal(formatarId('123456789'), '123 456 789');
+  assert.equal(lerId(' 123 456 789 '), '123456789');
+  assert.equal(lerId('123.456-789'), '123456789');
+  assert.equal(lerId('12345678'), null);
+  assert.equal(lerId('023456789'), null);
+  assert.equal(lerId('Ana'), null);
 });

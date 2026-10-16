@@ -46,9 +46,14 @@ atualização: guarde a senha num gerenciador de senhas.
 
 ### 2.3 Banco
 
-Mudanças no banco vão em arquivos novos em `banco/` (`002_...sql`), aplicados pelo editor de SQL do Supabase.
-`banco/testes.sql` confere as regras com contas simuladas e desfaz tudo no fim (termina com
-`RESULTADO: tudo certo`).
+Mudanças no banco vão em arquivos novos em `banco/` (`003_...sql`), aplicados pelo editor de SQL do Supabase, cada
+um com o seu teste (`testes.sql` para o `001`, `testes_002.sql` para o `002`). Os testes usam contas simuladas e desfazem
+tudo no fim (terminam com `RESULTADO: tudo certo`).
+
+| Migração | O que traz |
+|---|---|
+| `001_exilados.sql` | Tabelas, regras de acesso, convites, salas, amizades, mensagens, lives, imagens e tempo real. |
+| `002_ids.sql` | ID de 9 dígitos de cada conta (`exilados_meu_id`) e entrar no grupo pelo ID (`exilados_adicionar_por_id`): qualquer membro adiciona; quem o dono removeu só volta pelo dono. |
 
 O dono e as salas iniciais foram criados por um comando avulso (fora do repositório, porque tem o e-mail):
 
@@ -74,7 +79,9 @@ Registros do programa: `%APPDATA%\Exilados\sessoes.txt` (início, fim e quedas d
 
 ## 4. Roteiro de ponta a ponta (dono e um amigo)
 
-1. Dono: entrar no site com a conta do FilaBox; Configurações → Convidar pessoas; mandar o link.
+1. Dono: entrar no site com a conta do FilaBox; botão "Convidar pessoas" (no alto da lista de membros ou o ícone ao
+   lado de "Exilados") → "Criar link de convite"; mandar o link. Ou: o amigo cria a conta e abre o Exilados, vê o ID
+   dele (9 dígitos), e o dono digita esse número em "Adicionar pelo ID".
 2. Amigo: abrir o link, criar a conta (ou entrar), escolher o nome, entrar.
 3. Os dois: mandar mensagem com imagem na `#geral`; virar amigos (Mensagens diretas → Adicionar amigo) e trocar
    uma mensagem direta.

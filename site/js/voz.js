@@ -128,13 +128,31 @@ async function ligarMicrofone() {
   }
   voz.semMicrofone = false;
   microfone.trilha = new LK.LocalAudioTrack(microfone.faixa, undefined, true);
-  await sala.localParticipant.publishTrack(microfone.trilha, {
-    source: LK.Track.Source.Microphone,
-    dtx: true,
-    red: true,
-    audioPreset: LK.AudioPresets.speech,
-  });
-  if (voz.mudo || voz.surdo) await microfone.trilha.mute();
+  // Publicar pode falhar se a negociação com o servidor cruzar com a chegada do áudio de quem já está na sala:
+  // tenta de novo; se não der, fica só ouvindo (a sala não cai por isso).
+  const room = sala;
+  for (let tentativa = 1; tentativa <= 3; tentativa += 1) {
+    try {
+      await room.localParticipant.publishTrack(microfone.trilha, {
+        source: LK.Track.Source.Microphone,
+        dtx: true,
+        red: true,
+        audioPreset: LK.AudioPresets.speech,
+      });
+      if (voz.mudo || voz.surdo) await microfone.trilha.mute();
+      return;
+    } catch (erro) {
+      console.warn(`Exilados: o microfone não foi publicado (tentativa ${tentativa}):`, erro);
+      if (sala !== room) return;
+      await new Promise((r) => setTimeout(r, 1200 * tentativa));
+      if (sala !== room) return;
+    }
+  }
+  fecharMicrofone(microfone);
+  microfone = null;
+  voz.semMicrofone = true;
+  mudou();
+  aviso('Não deu para ligar o seu microfone agora: você está só ouvindo. Saia e entre de novo na sala para tentar outra vez.', { tipo: 'erro', duracao: 10000 });
 }
 
 function anexar(faixa, participante) {
@@ -215,6 +233,10 @@ export async function entrar(salaId) {
       dynacast: false,
       disconnectOnPageLeave: true,
       webAudioMix: true,
+      // O modo de conexão única (padrão novo da biblioteca) às vezes falha ao negociar no Chrome do Android
+      // ("Transceiver not found based on m-line index"); o modo clássico, com uma conexão para enviar e outra para
+      // receber, é o testado.
+      singlePeerConnection: false,
       audioOutput: { deviceId: preferencias().saida || 'default' },
     });
     sala = room;
@@ -234,7 +256,10 @@ export async function entrar(salaId) {
     voz.sala = null;
     atualizarPresenca({ voz: null });
     mudou();
-    throw erro;
+    // Erros do servidor do Exilados já vêm em português; os da conexão de voz, não.
+    if (erro?.status !== undefined) throw erro;
+    console.error('Exilados: não deu para entrar na sala de voz:', erro);
+    throw new Error('Não deu para entrar na sala de voz agora (falha na conexão de áudio). Tente de novo.');
   }
 }
 

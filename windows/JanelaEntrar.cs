@@ -55,7 +55,12 @@ internal sealed class JanelaEntrar : Form
             var membro = await conta.MembroAsync(_fechar.Token);
             if (membro is null)
             {
-                _erro.Text = "Esta conta ainda não faz parte do Exilados. Abra o link de convite no site e depois entre aqui.";
+                string id;
+                try { id = await conta.MeuIdAsync(_fechar.Token); }
+                catch (ExiladosException) { id = ""; }
+                _erro.Text = id.Length > 0
+                    ? $"Esta conta ainda não faz parte do Exilados. Seu ID é {id}: mande para alguém do grupo te adicionar e clique em Entrar de novo."
+                    : "Esta conta ainda não faz parte do Exilados. Abra o link de convite no site e depois entre aqui.";
                 return;
             }
             if (!membro.Value.Ativo)

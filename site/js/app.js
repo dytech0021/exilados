@@ -1,6 +1,6 @@
 // Exilados: início, navegação entre as telas, painéis do celular e avisos.
 import {
-  esquecerConvite, infoConvite, lerConviteDaUrl, telaAviso, telaConvite, telaLogin, telaNovaSenha,
+  esquecerConvite, infoConvite, lerConviteDaUrl, telaAviso, telaConvite, telaLogin, telaNovaSenha, telaSemGrupo,
 } from './auth.js';
 import {
   abrirDM, aceitarAmizade, desenharAmigos, desenharListaDM, desenharTopoDM, iniciarAmigos, pedidosRecebidos, pedirAmizade,
@@ -287,11 +287,12 @@ function decidir(usuario) {
     const codigo = lerConviteDaUrl();
     const info = await infoConvite(codigo);
     if (info?.valido) return telaConvite(info, usuario, async () => { decidindo = null; await decidir(usuario); });
+    const entrouDepois = async () => { decidindo = null; await decidir(usuario); };
     if (codigo) {
       esquecerConvite();
-      return telaAviso('Este convite não vale mais', 'Peça um link novo a quem te convidou. Os convites valem por 7 dias.', usuario);
+      return telaSemGrupo(usuario, entrouDepois, 'Este convite não vale mais (eles valem por 7 dias). Peça um link novo ou mande o seu ID para alguém do grupo te adicionar.');
     }
-    return telaAviso('Você ainda não faz parte do Exilados', 'Peça um link de convite a alguém do grupo e abra-o aqui.', usuario);
+    return telaSemGrupo(usuario, entrouDepois);
   })().catch((falha) => {
     decidindo = null;
     $('carregando-texto').textContent = `Não deu para abrir: ${falha.message} Tentando de novo...`;

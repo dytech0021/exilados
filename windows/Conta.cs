@@ -155,6 +155,27 @@ internal sealed class Conta
         }
     }
 
+    /// <summary>ID de 9 dígitos da conta (criado na primeira vez), para alguém do grupo adicionar a pessoa pelo número.</summary>
+    public async Task<string> MeuIdAsync(CancellationToken ct)
+    {
+        using var pedido = new HttpRequestMessage(HttpMethod.Post, $"{SupabaseUrl}/rest/v1/rpc/exilados_meu_id");
+        pedido.Headers.Add("apikey", ChavePublica);
+        pedido.Headers.Authorization = new AuthenticationHeaderValue("Bearer", await AcessoAsync(ct));
+        pedido.Content = new StringContent("{}", Encoding.UTF8, "application/json");
+        HttpResponseMessage resposta;
+        try { resposta = await Http.SendAsync(pedido, ct); }
+        catch (Exception ex) when (ex is HttpRequestException || (ex is TaskCanceledException && !ct.IsCancellationRequested))
+        {
+            throw new ExiladosException("Sem conexão com o servidor da conta.");
+        }
+        using (resposta)
+        {
+            if (!resposta.IsSuccessStatusCode) throw new ExiladosException($"O servidor da conta recusou o pedido ({(int)resposta.StatusCode}).");
+            string codigo = JsonSerializer.Deserialize<string>(await resposta.Content.ReadAsStringAsync(ct)) ?? "";
+            return codigo.Length == 9 ? $"{codigo[..3]} {codigo[3..6]} {codigo[6..]}" : codigo;
+        }
+    }
+
     // ---------- HTTP ----------
 
     private sealed record Sessao(

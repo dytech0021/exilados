@@ -7,6 +7,7 @@
   const MARINA = '00000000-0000-4000-8000-000000000003';
   const BIA = '00000000-0000-4000-8000-000000000004';
   const RAFA = '00000000-0000-4000-8000-000000000005';
+  const PEDRO = '00000000-0000-4000-8000-000000000006'; // tem conta, mas não é do grupo (para "Adicionar pelo ID")
   const S_GERAL = '10000000-0000-4000-8000-000000000001';
   const S_PRINTS = '10000000-0000-4000-8000-000000000002';
   const V_GERAL = '10000000-0000-4000-8000-000000000003';
@@ -40,6 +41,14 @@
       { id: uuid(), de: BIA, para: EU, estado: 'pendente', criada_em: iso(agora - 3600e3) },
     ],
     exilados_conversas: [],
+    exilados_ids: [
+      { user_id: EU, codigo: '855593920', nome: null },
+      { user_id: LUCAS, codigo: '123456789', nome: null },
+      { user_id: MARINA, codigo: '234567891', nome: null },
+      { user_id: BIA, codigo: '345678912', nome: null },
+      { user_id: RAFA, codigo: '456789123', nome: null },
+      { user_id: PEDRO, codigo: '567891234', nome: 'Pedro' },
+    ],
   };
   const falas = [
     [LUCAS, 'alguém pra jogar hoje?'], [EU, 'bora, daqui a pouco entro na Geral'], [MARINA, 'tô ao vivo, colem lá'],
@@ -136,6 +145,28 @@
     await espera(100);
     if (nome === 'exilados_info_convite') return { data: [{ valido: true, convidado_por: 'Dyego' }], error: null };
     if (nome === 'exilados_criar_convite') return { data: 'demo'.padEnd(64, '0'), error: null };
+    if (nome === 'exilados_meu_id') {
+      const meu = db.exilados_ids.find((i) => i.user_id === EU);
+      if (args?.nome) meu.nome = args.nome;
+      return { data: meu.codigo, error: null };
+    }
+    if (nome === 'exilados_adicionar_por_id') {
+      const numero = String(args.codigo || '').replace(/\D/g, '');
+      if (!/^[1-9]\d{8}$/.test(numero)) return { data: null, error: { message: 'O ID tem 9 dígitos.' } };
+      const alvo = db.exilados_ids.find((i) => i.codigo === numero);
+      if (!alvo) return { data: null, error: { message: 'Nenhuma conta com esse ID. Peça para a pessoa abrir o Exilados e conferir o número.' } };
+      const atual = db.exilados_membros.find((m) => m.user_id === alvo.user_id);
+      if (atual?.ativo) return { data: null, error: { message: `${atual.nome} já faz parte do grupo.` } };
+      if (atual) {
+        atual.ativo = true;
+        emitir('exilados_membros', 'UPDATE', { ...atual });
+        return { data: atual.nome, error: null };
+      }
+      const novo = { user_id: alvo.user_id, nome: alvo.nome || 'Novo membro', avatar: null, papel: 'membro', ativo: true, entrou_em: iso(Date.now()) };
+      db.exilados_membros.push(novo);
+      emitir('exilados_membros', 'INSERT', novo);
+      return { data: novo.nome, error: null };
+    }
     if (nome === 'exilados_entrar') {
       db.exilados_membros.push({ user_id: EU, nome: args.nome, avatar: null, papel: 'membro', ativo: true, entrou_em: iso(Date.now()) });
       return { data: null, error: null };

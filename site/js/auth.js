@@ -1,6 +1,6 @@
 // Entrar: login (e-mail e senha ou Google, contas do FilaBox), convite, nova senha e avisos de acesso.
 import { BASE } from './config.js';
-import { limparNome } from './formato.js';
+import { formatarId, limparNome } from './formato.js';
 import { conferir, sb, traduzirErro } from './supa.js';
 import { el, limpar } from './ui.js';
 
@@ -167,6 +167,68 @@ export function telaConvite(info, usuario, aoEntrar) {
     campo('Como você quer aparecer no grupo', nome, el('p', { class: 'ajuda', text: 'Dá para mudar depois nas configurações.' })),
     el('button', { class: 'botao cheio', type: 'submit', text: 'Entrar no Exilados' })),
     el('p', { class: 'rodape' }, `Conectado como ${usuario?.email || ''}. `, el('a', { href: '#', text: 'Usar outra conta', onclick: (e) => { e.preventDefault(); sair(); } })));
+}
+
+/**
+ * Logado, sem convite e ainda fora do grupo: mostra o ID da conta para alguém do grupo adicionar pelo número, e o
+ * nome com que a pessoa quer aparecer. Confere a cada 4 s se já foi adicionada e entra sozinha.
+ */
+export async function telaSemGrupo(usuario, aoEntrar, aviso = '') {
+  const sugestao = limparNome(usuario?.user_metadata?.full_name || usuario?.user_metadata?.name || (usuario?.email || '').split('@')[0]) || '';
+  let codigo;
+  try {
+    codigo = conferir(await sb.rpc('exilados_meu_id', { nome: sugestao || null }));
+  } catch (falha) {
+    return telaAviso('Você ainda não faz parte do Exilados', `Peça um link de convite a alguém do grupo. (${falha.message})`, usuario);
+  }
+  const nome = el('input', { class: 'entrada', value: sugestao, maxLength: 32, autocomplete: 'nickname' });
+  const salvo = el('p', { class: 'ajuda', text: '' });
+  const numero = el('div', { class: 'meu-id', text: formatarId(codigo), attrs: { 'aria-label': `Seu ID: ${formatarId(codigo)}` } });
+  let parado = false;
+  mostrar(
+    el('div', { class: 'convite-topo' }, el('div', { class: 'logo-ex', text: 'EX' })),
+    el('h1', { text: 'Quase lá!' }),
+    el('p', { class: 'subtitulo', text: aviso || 'Você ainda não faz parte do Exilados. Mande o seu ID para alguém do grupo te adicionar (ou abra um link de convite).' }),
+    el('span', { class: 'rotulo-id', text: 'Seu ID' }),
+    numero,
+    el('button', {
+      class: 'botao cheio cinza', type: 'button', text: 'Copiar o ID',
+      onclick: async () => {
+        try {
+          await navigator.clipboard.writeText(codigo);
+          salvo.textContent = 'ID copiado.';
+        } catch {
+          salvo.textContent = 'Selecione o número e copie.';
+        }
+      },
+    }),
+    salvo,
+    formulario(async () => {
+      const limpo = limparNome(nome.value);
+      if (!limpo) throw new Error('O nome precisa ter de 1 a 32 caracteres.');
+      conferir(await sb.rpc('exilados_meu_id', { nome: limpo }));
+      salvo.textContent = 'Nome salvo. Você entra com ele quando te adicionarem.';
+    },
+    campo('Como você quer aparecer no grupo', nome),
+    el('button', { class: 'botao cheio', type: 'submit', text: 'Salvar nome' })),
+    el('p', { class: 'ajuda', text: 'Esta tela abre o grupo sozinha assim que alguém te adicionar.' }),
+    el('p', { class: 'rodape' }, `Conectado como ${usuario?.email || ''}. `, el('a', { href: '#', text: 'Usar outra conta', onclick: (e) => { e.preventDefault(); parado = true; sair(); } })));
+  // Espera alguém adicionar a conta (pelo ID) e então abre o grupo.
+  const conferirEntrada = async () => {
+    if (parado || document.getElementById('entrada').hidden) return;
+    try {
+      const linha = conferir(await sb.from('exilados_membros').select('ativo').eq('user_id', usuario.id).maybeSingle());
+      if (linha?.ativo) {
+        parado = true;
+        await aoEntrar();
+        return;
+      }
+    } catch {
+      // Sem conexão agora: tenta de novo.
+    }
+    setTimeout(conferirEntrada, 4000);
+  };
+  setTimeout(conferirEntrada, 4000);
 }
 
 export function telaAviso(titulo, texto, usuario) {

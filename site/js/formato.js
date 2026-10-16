@@ -95,3 +95,15 @@ export function mensagemValida(texto, temImagem) {
 export function ordenarPorNome(lista, nome = (x) => x.nome) {
   return [...lista].sort((a, b) => nome(a).localeCompare(nome(b), 'pt-BR', { sensitivity: 'base' }));
 }
+
+/** ID de 9 dígitos de uma conta, em três grupos ("123 456 789"). */
+export function formatarId(codigo) {
+  const d = String(codigo || '').replace(/\D/g, '');
+  return d.length === 9 ? `${d.slice(0, 3)} ${d.slice(3, 6)} ${d.slice(6)}` : d;
+}
+
+/** Os 9 dígitos de um ID digitado com espaços, pontos ou traços; null se não for um ID. */
+export function lerId(texto) {
+  const d = String(texto || '').replace(/[\s.\-]/g, '');
+  return /^[1-9]\d{8}$/.test(d) ? d : null;
+}

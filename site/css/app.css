@@ -560,3 +560,24 @@ button.ao-vivo:hover { background: var(--vermelho-escuro); }
 }
 
 a.botao, a.botao:hover { color: #fff; text-decoration: none; }
+
+/* ID da conta (tela de quem ainda não está no grupo, Minha conta e convite) */
+.rotulo-id { display: block; text-align: center; color: var(--texto-fraco); font-size: 12px; font-weight: 700; text-transform: uppercase; letter-spacing: .02em; }
+.meu-id {
+  margin: 6px 0 14px; text-align: center; color: var(--texto-forte); font-size: 34px; font-weight: 700; letter-spacing: .04em;
+  font-variant-numeric: tabular-nums; user-select: all;
+}
+.secao-convite { padding: 14px 0; border-top: 1px solid var(--separador); }
+.secao-convite:first-of-type { border-top: 0; padding-top: 4px; }
+.secao-convite h3 { margin: 0 0 6px; color: var(--texto-forte); font-size: 15px; font-weight: 600; }
+.secao-convite p { margin: 0 0 10px; }
+.secao-convite .linha-form { margin-top: 0; }
+.secao-convite .erro-texto:empty { display: none; }
+.lateral-topo .convidar { color: var(--icone); }
+.lateral-topo .convidar:hover { color: var(--texto); background: transparent; }
+.membros .convidar-membros { display: flex; width: 100%; margin: 16px 0 0; }
+.lateral-topo-titulo {
+  flex: 1; min-width: 0; height: 100%; display: flex; align-items: center; gap: 4px; padding: 0; color: inherit;
+  font-weight: 600; text-align: left;
+}
+.lateral-topo-titulo:hover { color: #fff; }

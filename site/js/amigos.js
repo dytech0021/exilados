@@ -3,7 +3,7 @@
 import {
   amigos, amizadeCom, avisar, conversaCom, estado, meuId, membrosAtivos, ouvir,
 } from './estado.js';
-import { ordenarPorNome } from './formato.js';
+import { formatarId, lerId, ordenarPorNome } from './formato.js';
 import { statusDe } from './grupo.js';
 import { conferir, sb } from './supa.js';
 import {
@@ -148,22 +148,38 @@ function corpoAmigos(corpo) {
         botaoIcone('fechar', 'Cancelar pedido', () => desfazer(a, false), 'recusar'),
       ]))] : null);
   }
-  // Adicionar: qualquer membro do grupo que ainda não é amigo nem tem pedido.
-  const busca = el('input', { class: 'entrada busca', placeholder: 'Procurar pelo nome', attrs: { 'aria-label': 'Procurar pelo nome' } });
+  // Adicionar: qualquer membro do grupo que ainda não é amigo nem tem pedido, pelo nome ou pelo ID.
+  const busca = el('input', { class: 'entrada busca', placeholder: 'Nome ou ID (9 dígitos)', attrs: { 'aria-label': 'Procurar pelo nome ou pelo ID' } });
   const resultado = el('div');
-  const listar = () => {
+  let consulta = 0;
+  const desenharCandidatos = (candidatos, vazio) => limpar(resultado, candidatos.length
+    ? candidatos.map((m) => linhaPessoa(m, textoStatus(m.user_id), [
+      el('button', { class: 'botao pequeno', text: 'Enviar pedido', onclick: () => pedirAmizade(m.user_id) }),
+    ]))
+    : el('p', { class: 'ajuda', text: vazio }));
+  const disponiveis = () => membrosAtivos().filter((m) => m.user_id !== meuId() && !amizadeCom(m.user_id));
+  const listar = async () => {
+    const numero = lerId(busca.value);
+    const esta = ++consulta;
+    if (numero) {
+      const { data } = await sb.from('exilados_ids').select('user_id').eq('codigo', numero).maybeSingle();
+      if (esta !== consulta) return;
+      const pessoa = data && disponiveis().find((m) => m.user_id === data.user_id);
+      return desenharCandidatos(pessoa ? [pessoa] : [], data?.user_id === meuId() ? 'Esse é o seu próprio ID.'
+        : data && amizadeCom(data.user_id) ? 'Vocês já são amigos (ou já têm um pedido).'
+          : 'Nenhum membro do grupo com esse ID. Para trazer alguém novo, use Convidar pessoas.');
+    }
     const termo = busca.value.trim().toLocaleLowerCase('pt-BR');
-    const candidatos = ordenarPorNome(membrosAtivos().filter((m) => m.user_id !== meuId() && !amizadeCom(m.user_id)
-      && (!termo || m.nome.toLocaleLowerCase('pt-BR').includes(termo))));
-    limpar(resultado, candidatos.length
-      ? candidatos.map((m) => linhaPessoa(m, textoStatus(m.user_id), [
-        el('button', { class: 'botao pequeno', text: 'Enviar pedido', onclick: () => pedirAmizade(m.user_id) }),
-      ]))
-      : el('p', { class: 'ajuda', text: termo ? 'Ninguém do grupo com esse nome (ou já são amigos).' : 'Todo mundo do grupo já é seu amigo ou tem pedido pendente.' }));
+    desenharCandidatos(ordenarPorNome(disponiveis().filter((m) => !termo || m.nome.toLocaleLowerCase('pt-BR').includes(termo))),
+      termo ? 'Ninguém do grupo com esse nome (ou já são amigos).' : 'Todo mundo do grupo já é seu amigo ou tem pedido pendente.');
   };
   busca.addEventListener('input', listar);
   listar();
-  limpar(corpo, el('h3', { text: 'Adicionar amigo' }), el('p', { class: 'ajuda', text: 'Mande um pedido para alguém do grupo. Quando a pessoa aceitar, vocês conversam em particular.' }), busca, resultado);
+  const seuId = el('strong', { text: '' });
+  sb.rpc('exilados_meu_id').then(({ data }) => { if (data) seuId.textContent = formatarId(data); });
+  limpar(corpo, el('h3', { text: 'Adicionar amigo' }),
+    el('p', { class: 'ajuda' }, 'Procure alguém do grupo pelo nome ou pelo ID e mande um pedido. Quando a pessoa aceitar, vocês conversam em particular. Seu ID: ', seuId),
+    busca, resultado);
   busca.focus();
   return corpo;
 }

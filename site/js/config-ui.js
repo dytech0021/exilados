@@ -2,7 +2,7 @@
 // Também o convite.
 import { BASE, PASTA_IMAGENS } from './config.js';
 import { avisar, estado, eu, meuId, ouvir, souDono } from './estado.js';
-import { limparNome, ordenarPorNome } from './formato.js';
+import { formatarId, lerId, limparNome, ordenarPorNome } from './formato.js';
 import { conferirArquivo, LADO_PERFIL, reduzirImagem } from './imagens.js';
 import { api, conferir, sb } from './supa.js';
 import { sair } from './auth.js';
@@ -21,6 +21,13 @@ function paginaConta(secao) {
   const nome = el('input', { class: 'entrada', value: meu.nome, maxLength: 32, attrs: { 'aria-label': 'Nome no grupo' } });
   const faixa = el('div', { class: 'faixa-cor' });
   faixa.style.backgroundColor = '#c0662b';
+  const campoId = el('span', { text: '...' });
+  sb.rpc('exilados_meu_id').then(({ data }) => {
+    if (data) {
+      campoId.textContent = formatarId(data);
+      campoId.dataset.codigo = data;
+    }
+  });
   seletor.addEventListener('change', async () => {
     const arquivo = seletor.files[0];
     seletor.value = '';
@@ -59,7 +66,9 @@ function paginaConta(secao) {
               }
             },
           })),
-        el('div', { class: 'linha' }, el('div', {}, el('small', { text: 'E-mail' }), el('span', { text: estado.eu.email || '' }))))),
+        el('div', { class: 'linha' }, el('div', {}, el('small', { text: 'E-mail' }), el('span', { text: estado.eu.email || '' }))),
+        el('div', { class: 'linha' }, el('div', {}, el('small', { text: 'Seu ID no Exilados' }), campoId),
+          el('button', { class: 'botao pequeno cinza', text: 'Copiar', onclick: () => copiar(campoId.dataset.codigo || '') })))),
     seletor,
     el('h3', { text: 'Conta' }),
     el('p', { class: 'ajuda', text: 'A conta é a do FilaBox. Sair daqui desconecta só este navegador.' }),
@@ -268,7 +277,10 @@ function paginaMembros(secao) {
     limpar(secao,
       el('h2', { text: 'Membros do grupo' }),
       el('p', { class: 'ajuda', text: `${ativos.length} de no máximo 30 membros. Para chamar alguém, use Convidar pessoas.` }),
-      el('button', { class: 'botao', text: 'Convidar pessoas', onclick: convidar }),
+      el('button', { class: 'botao', text: 'Criar link de convite', onclick: convidar }),
+      el('h3', { text: 'Adicionar pelo ID' }),
+      el('p', { class: 'ajuda', text: 'Digite o ID (9 dígitos) que a pessoa vê ao abrir o Exilados.' }),
+      formAdicionarPorId(),
       el('h3', { text: `Membros — ${ativos.length}` }), el('div', { class: 'lista-config' }, ativos.map(item)),
       removidos.length ? [el('h3', { text: `Removidos — ${removidos.length}` }), el('div', { class: 'lista-config' }, removidos.map(item))] : null);
   };
@@ -361,27 +373,83 @@ export function abrirConfig(pagina) {
 
 // ---------- convite ----------
 
-export async function convidar() {
-  let codigo;
-  try {
-    codigo = conferir(await sb.rpc('exilados_criar_convite'));
-  } catch (falha) {
-    return erro(falha);
-  }
-  const link = `${location.origin}${BASE}#convite=${codigo}`;
-  const campo = el('input', { value: link, readOnly: true, attrs: { 'aria-label': 'Link do convite' } });
+/** Formulário "Adicionar pelo ID": a pessoa entra no grupo na hora. */
+function formAdicionarPorId() {
+  const campoId = el('input', {
+    class: 'entrada', placeholder: '123 456 789', maxLength: 13,
+    attrs: { inputmode: 'numeric', autocomplete: 'off', 'aria-label': 'ID da pessoa' },
+  });
+  const resposta = el('p', { class: 'erro-texto', attrs: { role: 'status' } });
+  const form = el('form', {
+    class: 'linha-form',
+    onsubmit: async (e) => {
+      e.preventDefault();
+      resposta.textContent = '';
+      resposta.style.color = '';
+      const numero = lerId(campoId.value);
+      if (!numero) {
+        resposta.textContent = 'O ID tem 9 dígitos (a pessoa vê o dela ao abrir o Exilados).';
+        return;
+      }
+      const botao = form.querySelector('button');
+      botao.disabled = true;
+      try {
+        const nome = conferir(await sb.rpc('exilados_adicionar_por_id', { codigo: numero }));
+        campoId.value = '';
+        resposta.style.color = 'var(--verde)';
+        resposta.textContent = `${nome} entrou no grupo.`;
+        aviso(`${nome} entrou no grupo.`);
+      } catch (falha) {
+        resposta.textContent = falha.message;
+      } finally {
+        botao.disabled = false;
+      }
+    },
+  }, campoId, el('button', { class: 'botao', type: 'submit', text: 'Adicionar' }));
+  return el('div', {}, form, resposta);
+}
+
+/** Convidar: criar o link de convite ou adicionar alguém digitando o ID da conta dela. */
+export function convidar() {
+  const areaLink = el('div');
+  const criar = el('button', {
+    class: 'botao', type: 'button', text: 'Criar link de convite',
+    onclick: async () => {
+      criar.disabled = true;
+      try {
+        const codigo = conferir(await sb.rpc('exilados_criar_convite'));
+        const link = `${location.origin}${BASE}#convite=${codigo}`;
+        const campo = el('input', { value: link, readOnly: true, attrs: { 'aria-label': 'Link do convite' } });
+        limpar(areaLink,
+          el('div', { class: 'copiar' }, campo, el('button', { class: 'botao pequeno', text: 'Copiar', onclick: () => copiar(link) })),
+          navigator.share ? el('p', { class: 'ajuda' }, el('a', {
+            href: '#', text: 'Compartilhar...',
+            onclick: (e) => { e.preventDefault(); navigator.share({ title: 'Exilados', text: 'Entra no Exilados:', url: link }).catch(() => {}); },
+          })) : null);
+        criar.textContent = 'Criar outro link';
+        campo.select();
+        // Já deixa copiado quando o navegador permite; se não, o link fica selecionado no campo.
+        navigator.clipboard?.writeText(link).then(() => aviso('Link copiado.')).catch(() => {});
+      } catch (falha) {
+        erro(falha);
+      } finally {
+        criar.disabled = false;
+      }
+    },
+  });
   janela({
-    titulo: 'Convidar amigos para Exilados',
+    titulo: 'Convidar para o Exilados',
     conteudo: el('div', {},
-      el('p', { text: 'Mande este link para quem você quer chamar. Ele vale por 7 dias e serve para várias pessoas.' }),
-      el('div', { class: 'copiar' }, campo, el('button', { class: 'botao pequeno', text: 'Copiar', onclick: () => copiar(link) })),
-      navigator.share ? el('p', { class: 'ajuda' }, el('a', {
-        href: '#', text: 'Compartilhar...',
-        onclick: (e) => { e.preventDefault(); navigator.share({ title: 'Exilados', text: 'Entra no Exilados:', url: link }).catch(() => {}); },
-      })) : null),
+      el('section', { class: 'secao-convite' },
+        el('h3', { text: 'Link de convite' }),
+        el('p', { text: 'Crie um link e mande para quem você quer chamar. Ele vale por 7 dias e serve para várias pessoas.' }),
+        criar, areaLink),
+      el('section', { class: 'secao-convite' },
+        el('h3', { text: 'Adicionar pelo ID' }),
+        el('p', { text: 'Quem já tem conta vê o próprio ID (9 dígitos) ao abrir o Exilados. Digite aqui e a pessoa entra no grupo na hora.' }),
+        formAdicionarPorId())),
     botoes: [{ rotulo: 'Pronto' }],
   });
-  campo.select();
 }
 
 ouvir('membros', () => {
