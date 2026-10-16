@@ -100,6 +100,7 @@ async function paginaVoz(secao) {
   const saida = el('select', { class: 'entrada', attrs: { 'aria-label': 'Dispositivo de saída' } });
   const volume = el('input', { type: 'range', class: 'faixa-config', min: 0, max: 200, value: p.volumeEntrada, attrs: { 'aria-label': 'Volume de entrada' } });
   const valorVolume = el('span', { text: `${p.volumeEntrada}%` });
+  const cancelamentoRuido = el('input', { type: 'checkbox', checked: p.cancelamentoRuido, attrs: { 'aria-label': 'Cancelamento de ruído do microfone' } });
   const volumeSaida = el('input', {
     type: 'range', class: 'faixa-config', min: 0, max: voz.VOLUME_MAXIMO, value: Math.min(p.volumeSaida, voz.VOLUME_MAXIMO),
     attrs: { 'aria-label': 'Volume de saída' },
@@ -150,6 +151,12 @@ async function paginaVoz(secao) {
     valorVolume.textContent = `${volume.value}%`;
     voz.definirVolumeEntrada(Number(volume.value));
   });
+  cancelamentoRuido.addEventListener('change', async () => {
+    cancelamentoRuido.disabled = true;
+    try { await voz.definirCancelamentoRuido(cancelamentoRuido.checked); }
+    catch (falha) { cancelamentoRuido.checked = !cancelamentoRuido.checked; erro(falha); }
+    finally { cancelamentoRuido.disabled = false; }
+  });
   const mostrarNivel = (nivel) => { barra.style.width = `${Math.round(nivel * 100)}%`; };
   botaoTeste.addEventListener('click', async () => {
     if (parar) {
@@ -180,7 +187,8 @@ async function paginaVoz(secao) {
     el('p', { class: 'ajuda', text: 'Fale algo: a barra mostra o que o microfone capta (com o volume de entrada acima).' }),
     botaoTeste, medidor,
     el('h3', { text: 'Processamento' }),
-    el('p', { class: 'ajuda', text: 'Redução de ruído, cancelamento de eco e ajuste automático de ganho do navegador ficam sempre ligados. O volume de cada pessoa se ajusta com o botão direito no nome dela (ou segurando, no celular).' }));
+    el('label', { class: 'opcao-voz' }, cancelamentoRuido, el('span', { text: 'Cancelamento de ruído do microfone' })),
+    el('p', { class: 'ajuda', text: 'Reduz sons externos com RNNoise quando o navegador permite. O cancelamento de eco e a redução de ruído do navegador continuam ativos. O volume de cada pessoa se ajusta com o botão direito no nome dela (ou segurando, no celular).' }));
   await preencher();
   const pararOuvir = ouvir('dispositivos', preencher);
   return () => {

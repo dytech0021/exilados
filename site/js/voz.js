@@ -2,7 +2,8 @@
 // microfone e de saída com troca na hora, o volume de entrada e compartilhar a tela (como no Discord).
 //
 // O microfone passa por um ganho (Web Audio) antes de ser publicado, para o volume de entrada valer na hora; a
-// redução de ruído, o cancelamento de eco e o ajuste de ganho do navegador ficam sempre ligados.
+// redução de ruído, o cancelamento de eco e o ajuste de ganho do navegador ficam sempre ligados. O RNNoise acrescenta
+// supressão de sons externos antes do ganho, quando AudioWorklet/WebAssembly estão disponíveis.
 //
 // A voz de todos chega sozinha; a tela de alguém (vídeo e som) só chega para quem abriu a transmissão dela, para não
 // gastar a internet de quem não está assistindo.
@@ -10,6 +11,7 @@ import { LIVEKIT_SCRIPT } from './config.js';
 import { atualizarPresenca, avisarQueFalo } from './dados.js';
 import { avisar, estado, meuId } from './estado.js';
 import { api } from './supa.js';
+import { opcoesPublicacaoTela, qualidadeRecebida } from './qualidade-tela.js';
 import { aviso } from './ui.js';
 
 // tela: { qualidade, som } enquanto compartilha a própria tela; assistindo: de quem é a tela aberta (ou null).
@@ -32,6 +34,7 @@ export const QUALIDADE_PADRAO = '1080p30';
  * fone e celular), e o volume de cada pessoa vai até 100%.
  */
 export const ANDROID = typeof navigator !== 'undefined' && /Android/i.test(navigator.userAgent);
+const CELULAR = typeof navigator !== 'undefined' && /Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
 export const VOLUME_MAXIMO = ANDROID ? 100 : 200;
 estado.falandoNaSala = new Set();
 
@@ -53,6 +56,7 @@ export function preferencias() {
     prefs.volumes ||= {};
     prefs.volumeEntrada ??= 100;
     prefs.volumeSaida ??= 100;
+    prefs.cancelamentoRuido ??= true;
     voz.mudo = Boolean(prefs.mudo);
     voz.surdo = Boolean(prefs.surdo);
   }
@@ -178,8 +182,18 @@ async function abrirMicrofone() {
     }
   }
   const pista = bruto.getAudioTracks()[0];
-  const ctx = new AudioContext();
+  let ctx;
+  try { ctx = new AudioContext({ sampleRate: 48000 }); } catch { ctx = new AudioContext(); }
   const fonte = ctx.createMediaStreamSource(bruto);
+  let filtroRuido = null;
+  if (p.cancelamentoRuido && ctx.sampleRate === 48000 && ctx.audioWorklet && typeof AudioWorkletNode !== 'undefined') {
+    try {
+      await ctx.audioWorklet.addModule(new URL('../vendor/noise-worklet.js', import.meta.url));
+      filtroRuido = new AudioWorkletNode(ctx, 'exilados-cancelamento-ruido');
+    } catch (falha) {
+      console.warn('Exilados: RNNoise indisponível, usando a redução do navegador:', falha);
+    }
+  }
   const ganho = ctx.createGain();
   ganho.gain.value = p.volumeEntrada / 100;
   // Tratamento de voz (como o do Discord): o compressor aproxima as partes fracas das fortes e, junto com o reforço,
@@ -202,7 +216,10 @@ async function abrirMicrofone() {
   const analisador = ctx.createAnalyser();
   analisador.fftSize = 512;
   const destino = ctx.createMediaStreamDestination();
-  fonte.connect(ganho);
+  if (filtroRuido) {
+    fonte.connect(filtroRuido);
+    filtroRuido.connect(ganho);
+  } else fonte.connect(ganho);
   ganho.connect(compressor);
   compressor.connect(reforco);
   reforco.connect(limitador);
@@ -210,7 +227,7 @@ async function abrirMicrofone() {
   limitador.connect(destino);
   if (ctx.state === 'suspended') await ctx.resume().catch(() => {});
   return {
-    bruto, ctx, ganho, analisador,
+    bruto, ctx, ganho, analisador, filtroRuido,
     faixa: destino.stream.getAudioTracks()[0],
     aparelho: pista?.getSettings?.().deviceId || '',
     nome: nomeDoAparelho({ label: pista?.label, deviceId: pista?.getSettings?.().deviceId }),
@@ -226,6 +243,8 @@ function fecharMicrofone(m) {
   if (!m) return;
   m.bruto.getTracks().forEach((t) => t.stop());
   m.faixa?.stop();
+  m.filtroRuido?.port.postMessage('parar');
+  m.filtroRuido?.disconnect();
   m.ctx.close().catch(() => {});
 }
 
@@ -274,6 +293,7 @@ const ehDaTela = (pub) => pub.source === LK.Track.Source.ScreenShare || pub.sour
 /** A voz de todos é recebida sempre; a tela (vídeo e som), só a de quem está sendo assistido; câmera, nunca. */
 function decidirRecebimento(pub, participante) {
   const receber = ehDaTela(pub) ? voz.assistindo === participante.identity : pub.kind === 'audio';
+  if (receber && pub.source === LK.Track.Source.ScreenShare) pub.setVideoQuality(qualidadeRecebida(LK, CELULAR, pub.simulcasted));
   if (receber) pub.setSubscribed(true);
 }
 
@@ -521,13 +541,7 @@ export async function compartilharTela(qualidade = preferencias().qualidadeTela 
   tela = nova;
   pistaVideo.addEventListener('ended', () => { if (tela === nova) pararTela().catch(() => {}); });
   try {
-    await room.localParticipant.publishTrack(nova.video, {
-      source: LK.Track.Source.ScreenShare,
-      videoCodec: 'h264',
-      backupCodec: false,
-      simulcast: false,
-      screenShareEncoding: { maxBitrate: q.bitrate, maxFramerate: q.fps },
-    });
+    await room.localParticipant.publishTrack(nova.video, opcoesPublicacaoTela(LK, q));
     if (nova.som) {
       await room.localParticipant.publishTrack(nova.som, {
         source: LK.Track.Source.ScreenShareAudio,
@@ -576,7 +590,29 @@ export async function pararTela({ trocando = false } = {}) {
 function receberTelaDe(id, sim) {
   const participante = sala?.remoteParticipants.get(id);
   if (!participante) return;
-  for (const pub of participante.trackPublications.values()) if (ehDaTela(pub)) pub.setSubscribed(sim);
+  for (const pub of participante.trackPublications.values()) {
+    if (!ehDaTela(pub)) continue;
+    if (sim && pub.source === LK.Track.Source.ScreenShare) pub.setVideoQuality(qualidadeRecebida(LK, CELULAR, pub.simulcasted));
+    pub.setSubscribed(sim);
+  }
+}
+
+/** Pede de novo só o vídeo quando a faixa chegou, mas nenhum quadro foi decodificado. */
+export function reinscreverVideoDaTela(id) {
+  const room = sala;
+  const pub = room?.remoteParticipants.get(id)?.getTrackPublication(LK.Track.Source.ScreenShare);
+  if (!pub || voz.assistindo !== id) return;
+  pub.setSubscribed(false);
+  setTimeout(() => {
+    if (sala === room && voz.assistindo === id) {
+      pub.setVideoQuality(qualidadeRecebida(LK, CELULAR, pub.simulcasted));
+      pub.setSubscribed(true);
+    }
+  }, 200);
+}
+
+export function iniciarVideo() {
+  return sala?.startVideo();
 }
 
 /** Abre a tela de `id` (precisa estar na mesma sala de voz). Só uma por vez, como no Discord. */
@@ -680,11 +716,15 @@ export async function definirEntrada(id) {
     return;
   }
   const novo = await abrirMicrofone();
-  await microfone.trilha.replaceTrack(novo.faixa, { userProvidedTrack: true });
+  try {
+    await microfone.trilha.replaceTrack(novo.faixa, { userProvidedTrack: true });
+  } catch (falha) {
+    fecharMicrofone(novo);
+    throw falha;
+  }
   const velho = microfone;
   microfone = { ...novo, trilha: velho.trilha };
-  velho.bruto.getTracks().forEach((t) => t.stop());
-  velho.ctx.close().catch(() => {});
+  fecharMicrofone(velho);
   if (voz.mudo || voz.surdo) await microfone.trilha.mute();
   mudou();
   avisar('microfoneTrocado');
@@ -700,6 +740,22 @@ export function definirVolumeEntrada(porcento) {
   preferencias().volumeEntrada = Math.max(0, Math.min(200, Math.round(porcento)));
   guardar();
   if (microfone) microfone.ganho.gain.setTargetAtTime(prefs.volumeEntrada / 100, microfone.ctx.currentTime, 0.05);
+}
+
+/** Troca o filtro de ruído na hora, mantendo a publicação de voz na sala. */
+export async function definirCancelamentoRuido(ligado) {
+  const p = preferencias();
+  const anterior = p.cancelamentoRuido;
+  p.cancelamentoRuido = Boolean(ligado);
+  guardar();
+  if (!microfone?.trilha) return;
+  try {
+    await definirEntrada(p.entrada);
+  } catch (falha) {
+    p.cancelamentoRuido = anterior;
+    guardar();
+    throw falha;
+  }
 }
 
 /**

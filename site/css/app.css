@@ -548,6 +548,8 @@ button.ao-vivo:hover { background: var(--vermelho-escuro); }
 .medidor { height: 8px; border-radius: 4px; background: #4e5058; overflow: hidden; margin-top: 8px; }
 .medidor div { height: 100%; width: 0; background: var(--verde); transition: width .05s linear; }
 .faixa-config { width: 100%; accent-color: var(--destaque); }
+.opcao-voz { display: flex; align-items: center; gap: 10px; margin: 12px 0; cursor: pointer; }
+.opcao-voz input { width: 18px; height: 18px; accent-color: var(--destaque); }
 .duas-colunas { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
 .lista-config { border-radius: 8px; background: var(--lateral); }
 .lista-config .item { display: flex; align-items: center; gap: 12px; padding: 10px 12px; border-top: 1px solid var(--separador); }

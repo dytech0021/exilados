@@ -20,6 +20,8 @@ export function fecharTela() {
 }
 
 function soltarVideo(a) {
+  clearTimeout(a.timerImagem);
+  a.timerImagem = null;
   if (a.faixa) a.faixa.detach(a.video);
   a.faixa = null;
   a.video.srcObject = null;
@@ -105,8 +107,26 @@ function atualizar(a) {
     t.video.attach(a.video);
     a.faixa = t.video;
     a.video.muted = true; // o som da tela toca à parte (com o volume da transmissão)
-    a.video.play().catch(() => {});
+    a.video.play().catch(() => {
+      if (atual !== a || a.faixa !== t.video) return;
+      a.reproducaoBloqueada = true;
+      dizer(a, 'Toque para iniciar a imagem.', el('button', {
+        class: 'botao', text: 'Ativar vídeo', onclick: () => {
+          voz.iniciarVideo()?.then(() => a.video.play()).catch(erro);
+        },
+      }));
+    });
+    if (!propria) a.timerImagem = setTimeout(() => {
+      if (atual !== a || a.faixa !== t.video || a.video.readyState >= 2) return;
+      if (!a.tentativasImagem++) {
+        dizer(a, 'A imagem demorou a chegar. Tentando novamente...');
+        voz.reinscreverVideoDaTela(a.id);
+      } else {
+        dizer(a, 'A imagem não chegou. Reabra a transmissão ou peça para quem transmite iniciar em 720p.', voltar);
+      }
+    }, 12000);
   }
+  if (a.reproducaoBloqueada) return;
   if (a.video.readyState >= 2) dizer(a, '');
   else dizer(a, 'Carregando a imagem...');
 }
@@ -126,7 +146,7 @@ export function montarTela(corpo, id, aoFechar) {
   const faixaVolume = el('input', {
     type: 'range', min: 0, max: voz.VOLUME_MAXIMO, value: voz.volumeDaTela(), attrs: { 'aria-label': 'Volume da transmissão' },
   });
-  const a = { id, video, sobre, contagem, faixaVolume, aoFechar, pararOuvir: [], faixa: null, entrando: false, volumeAntes: 100 };
+  const a = { id, video, sobre, contagem, faixaVolume, aoFechar, pararOuvir: [], faixa: null, entrando: false, volumeAntes: 100, tentativasImagem: 0 };
   a.botaoSom = botaoIcone('som', 'Silenciar a transmissão', () => {
     const volume = voz.volumeDaTela();
     if (volume > 0) a.volumeAntes = volume;
@@ -150,7 +170,14 @@ export function montarTela(corpo, id, aoFechar) {
     el('span', { class: 'assistindo', attrs: { title: 'Assistindo agora' } }, icone('olho'), contagem),
     a.botaoParar, botaoTela);
   a.palco = el('div', { class: 'live' }, video, sobre, barra);
-  video.addEventListener('playing', () => { if (atual === a && a.faixa) dizer(a, ''); });
+  video.addEventListener('playing', () => {
+    if (atual !== a || !a.faixa) return;
+    clearTimeout(a.timerImagem);
+    a.timerImagem = null;
+    a.tentativasImagem = 0;
+    a.reproducaoBloqueada = false;
+    dizer(a, '');
+  });
   video.addEventListener('dblclick', () => telaCheia(a));
   limpar(corpo, a.palco);
   atual = a;
