@@ -17,10 +17,11 @@ test('online se alguma aba está online; sala de voz da aba que entrou por últi
   assert.equal(contarAssistindo(resumo, 'c'), 0);
 });
 
-test('live no ar só com sinal de até 20 s no relógio do servidor', () => {
+test('live continua visível durante atraso temporário de 30 s no sinal', () => {
   const agora = Date.parse('2026-10-15T22:00:30Z');
   assert.equal(liveNoAr({ ultimo_sinal: '2026-10-15T22:00:15Z' }, agora), true);
-  assert.equal(liveNoAr({ ultimo_sinal: '2026-10-15T22:00:09Z' }, agora), false);
+  assert.equal(liveNoAr({ ultimo_sinal: '2026-10-15T22:00:00Z' }, agora), true);
+  assert.equal(liveNoAr({ ultimo_sinal: '2026-10-15T21:59:29Z' }, agora), false);
   assert.equal(liveNoAr(null, agora), false);
 });
 

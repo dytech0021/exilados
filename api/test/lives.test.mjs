@@ -79,7 +79,7 @@ test('permissão de assistir vale só para aquele caminho e só por alguns minut
   assert.equal(lives.podeLer(a.caminho, token), false);
 });
 
-test('sem sinal de vida por mais de 20 s a live está encerrada para quem quer assistir', () => {
+test('sem sinal de vida por mais de 60 s a live está encerrada para quem quer assistir', () => {
   const r = relogio();
   const lives = new Lives({ segredo: SEGREDO, agora: r.agora });
   const live = lives.comecar(ANA);

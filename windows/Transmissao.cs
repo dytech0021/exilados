@@ -17,13 +17,12 @@ internal sealed record OpcoesLive(int Altura = 1080, int Quadros = 60, bool Som 
 /// <summary>
 /// Uma live para o grupo. Codifica uma vez (H.264 pela placa de vídeo, som em Opus) e envia um único fluxo,
 /// cifrado (RTSPS), ao servidor de mídia, que entrega a cada membro que abrir. O exilados-api dá o caminho e a
-/// senha de envio; a cada 10 s o programa manda o sinal de vida, sem o qual a live some do site em 20 s.
-/// Se o envio cair, tenta de novo com o mesmo caminho; sem voltar em 30 s, encerra.
+/// senha de envio; a cada 10 s o programa manda o sinal de vida. Se o envio cair,
+/// tenta de novo com o mesmo caminho até a pessoa parar ou o servidor revogar a live.
 /// </summary>
 internal sealed class Transmissao : IAsyncDisposable
 {
     public const int PortaMidia = 8322;
-    private static readonly TimeSpan PrazoQueda = TimeSpan.FromSeconds(30);
     private readonly Api _api;
     private readonly OpcoesLive _opcoes;
     private readonly string _codificador;
@@ -100,7 +99,6 @@ internal sealed class Transmissao : IAsyncDisposable
     {
         var ct = _parar.Token;
         int falhas = 0;
-        DateTime? caiuEm = null;
         while (!ct.IsCancellationRequested)
         {
             string problema;
@@ -108,15 +106,8 @@ internal sealed class Transmissao : IAsyncDisposable
             catch (OperationCanceledException) when (ct.IsCancellationRequested) { break; }
             catch (Exception ex) when (ex is IOException or ExiladosException or UnauthorizedAccessException or TimeoutException) { problema = ex.Message; }
             if (ct.IsCancellationRequested) break;
-            if (Interlocked.Read(ref _quadrosEnviados) > 0) caiuEm = null;
-            caiuEm ??= DateTime.Now;
             falhas++;
             Registro.Sessao($"live: o envio parou ({problema}); tentativa {falhas}");
-            if (DateTime.Now - caiuEm > PrazoQueda)
-            {
-                Encerrar($"A live caiu e não voltou em 30 s ({problema}).");
-                break;
-            }
             int espera = Math.Min(10, 2 * falhas);
             MudarSituacao($"O envio parou ({problema}). Tentando de novo em {espera} s...", false);
             try { await Task.Delay(TimeSpan.FromSeconds(espera), ct); }

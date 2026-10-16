@@ -1,8 +1,7 @@
 // Assistir a uma live no site: vídeo por WebRTC (WHEP) do MediaMTX, com a permissão de leitura que o
 // exilados-api entrega a membros ativos. Reconecta sozinho; avisa "A live terminou" quando ela acaba.
 import { AO_VIVO } from './config.js';
-import { agoraServidor, estado, meuId, ouvir } from './estado.js';
-import { liveNoAr } from './presenca.js';
+import { estado, meuId, ouvir } from './estado.js';
 import { api } from './supa.js';
 import { botaoIcone, el, icone, limpar } from './ui.js';
 
@@ -82,7 +81,12 @@ async function pedirPermissao(a) {
     if (dados.assistindo >= 0) a.assistindo.textContent = String(dados.assistindo);
     return true;
   } catch (erro) {
-    if (erro.status === 404) terminou(a);
+    // Uma checagem periódica pode falhar enquanto o vídeo já toca: preserve a sessão.
+    if (a.pc?.connectionState === 'connected' && erro.status !== 401 && erro.status !== 403) return false;
+    if (erro.status === 404) {
+      if (!estado.lives.has(a.usuario)) terminou(a);
+      else retentar(a, 'A transmissão foi interrompida. Aguardando voltar...', 4000);
+    }
     else if (erro.status === 403 || erro.status === 401) {
       a.encerrada = true;
       dizer(a, erro.message);
@@ -145,7 +149,7 @@ async function conectar(a) {
   }
   if (a.pc !== conexao) return;
   if (resposta.status === 404) return retentar(a, 'A live está começando ou voltando. A imagem aparece aqui sozinha.', 3000);
-  if (resposta.status === 401 || resposta.status === 403) return terminou(a);
+  if (resposta.status === 401 || resposta.status === 403) return retentar(a, 'Reconectando à transmissão...', 3000);
   if (!resposta.ok) return retentar(a, `O servidor respondeu com erro (${resposta.status}). Tentando de novo...`, 4000);
   const sessao = resposta.headers.get('Location');
   a.sessao = sessao ? new URL(sessao, endereco).href : null;
@@ -206,7 +210,7 @@ export function montarLive(corpo, usuario, aoFechar) {
 
   navigator.wakeLock?.request('screen').then((trava) => { a.wakeLock = trava; }).catch(() => {});
   a.pararOuvir.push(ouvir('lives', () => {
-    if (!liveNoAr(estado.lives.get(usuario), agoraServidor())) terminou(a);
+    if (!estado.lives.has(usuario)) terminou(a);
   }));
   const tela = () => limpar(botaoTela, icone(document.fullscreenElement ? 'sairTelaCheia' : 'telaCheia'));
   document.addEventListener('fullscreenchange', tela);

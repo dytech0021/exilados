@@ -272,12 +272,15 @@ test('assistir: membro recebe a permissão de leitura; o MediaMTX aceita só com
   } finally { t.fechar(); }
 });
 
-test('live sem sinal de vida por mais de 20 s: novas leituras recusadas e "A live terminou"', async () => {
+test('atraso de 30 s no sinal não encerra a live; ausência prolongada recusa leitura', async () => {
   const t = await montar();
   try {
     const live = await t.chamar('POST', '/live/comecar', { quem: ANA });
     const token = (await t.chamar('POST', '/live/assistir', { quem: DONO, corpo: { usuario: ANA } })).dados.token;
-    t.relogio.t += 26000;
+    t.relogio.t += 30000;
+    assert.equal((await t.chamar('POST', '/live/assistir', { quem: DONO, corpo: { usuario: ANA } })).status, 200);
+    assert.equal(await autorizar({ action: 'read', path: live.dados.caminho, token }, { lives: t.lives }), true);
+    t.relogio.t += 36000;
     const r = await t.chamar('POST', '/live/assistir', { quem: DONO, corpo: { usuario: ANA } });
     assert.equal(r.status, 404);
     assert.equal(r.dados.erro, 'A live terminou.');

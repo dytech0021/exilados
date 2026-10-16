@@ -1,7 +1,7 @@
 // Presença (quem está online, ausente e em qual sala de voz) e quem está falando, pelo canal privado "exilados"
 // do Supabase Realtime. As funções puras são testadas; o canal é montado por grupo.js.
 
-export const SEM_SINAL_MS = 20000;
+export const SEM_SINAL_MS = 60000;
 export const AUSENTE_MS = 10 * 60 * 1000;
 
 /**
@@ -34,7 +34,7 @@ export function contarAssistindo(resumo, id) {
   return n;
 }
 
-/** A live está no ar se o último sinal de vida tem até 20 s (no relógio do servidor). */
+/** A live está no ar se o último sinal de vida tem até 60 s (no relógio do servidor). */
 export function liveNoAr(live, agoraServidor) {
   if (!live) return false;
   const sinal = Date.parse(live.ultimo_sinal);

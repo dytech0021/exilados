@@ -5,7 +5,9 @@
 // sinal de vida e os caminhos encerrados (para a senha de uma live parada não servir mais).
 import { createHmac, randomInt, timingSafeEqual } from 'node:crypto';
 
-export const SEM_SINAL_MS = 20000;
+// O sinal vem a cada 10 s, mas uma chamada HTTP pode levar até 20 s.
+// Uma tentativa lenta ou perdida não deve fazer a live sumir para quem assiste.
+export const SEM_SINAL_MS = 60000;
 export const CAMINHO = /^ex\/[A-Za-z0-9]{24}$/;
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
 const LETRAS = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789';
