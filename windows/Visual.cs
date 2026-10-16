@@ -15,7 +15,8 @@ internal static class Visual
     public static readonly Color Vermelho = Color.FromArgb(0xDA, 0x37, 0x3C);
     public static readonly Color Verde = Color.FromArgb(0x23, 0xA5, 0x5A);
     public static readonly Color Cinza = Color.FromArgb(0x4E, 0x50, 0x58);
-    public static readonly Color Laranja = Color.FromArgb(0xC0, 0x66, 0x2B);
+    public static readonly Color Lavanda = Color.FromArgb(0xBD, 0xAA, 0xFF);
+    public static readonly Color RoxoMarca = Color.FromArgb(0x37, 0x25, 0x5C);
 
     public static Font Fonte(float tamanho = 10f, FontStyle estilo = FontStyle.Regular) => new("Segoe UI", tamanho, estilo);
 

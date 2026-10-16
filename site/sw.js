@@ -1,7 +1,7 @@
 // Service worker do Exilados (escopo /exilados/): guarda a casca do site para abrir rápido e funcionar como
 // aplicativo instalado. Sempre tenta a rede primeiro (o site muda sem aviso); a cópia guardada só entra quando a
 // rede falha. API, voz, lives e atualização nunca passam por aqui.
-const VERSAO = 'exilados-casca-5';
+const VERSAO = 'exilados-casca-6';
 const CASCA = [
   './',
   'index.html',
@@ -11,7 +11,8 @@ const CASCA = [
   'js/app.js', 'js/api.js', 'js/amigos.js', 'js/auth.js', 'js/chat.js', 'js/config.js', 'js/config-ui.js',
   'js/dados.js', 'js/estado.js', 'js/formato.js', 'js/grupo.js', 'js/imagens.js', 'js/live.js', 'js/presenca.js', 'js/programa.js',
   'js/supa.js', 'js/tela.js', 'js/ui.js', 'js/versao.js', 'js/voz.js',
-  'icones/icone-192.png',
+  'icones/icone-192.png?v=2', 'icones/icone-180.png?v=2',
+  'icones/icone-512.png?v=2', 'icones/icone-mascara-512.png?v=2',
 ];
 const FORA = ['/exilados/api/', '/exilados/ao-vivo/', '/exilados/atualizacao/', '/exilados/rtc'];
 

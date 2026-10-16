@@ -48,7 +48,7 @@ function mostrar(...conteudo) {
 
 function topoConvite(info) {
   return el('div', { class: 'convite-topo' },
-    el('div', { class: 'logo-ex', text: 'EX' }),
+    el('div', { class: 'logo-ex', attrs: { role: 'img', 'aria-label': 'Exilados' } }),
     el('p', { class: 'subtitulo', text: `${info.convidado_por || 'Alguém do grupo'} convidou você para entrar em` }),
     el('h1', { text: 'Exilados' }));
 }
@@ -186,7 +186,7 @@ export async function telaSemGrupo(usuario, aoEntrar, aviso = '') {
   const numero = el('div', { class: 'meu-id', text: formatarId(codigo), attrs: { 'aria-label': `Seu ID: ${formatarId(codigo)}` } });
   let parado = false;
   mostrar(
-    el('div', { class: 'convite-topo' }, el('div', { class: 'logo-ex', text: 'EX' })),
+    el('div', { class: 'convite-topo' }, el('div', { class: 'logo-ex', attrs: { role: 'img', 'aria-label': 'Exilados' } })),
     el('h1', { text: 'Quase lá!' }),
     el('p', { class: 'subtitulo', text: aviso || 'Você ainda não faz parte do Exilados. Mande o seu ID para alguém do grupo te adicionar (ou abra um link de convite).' }),
     el('span', { class: 'rotulo-id', text: 'Seu ID' }),
@@ -233,7 +233,7 @@ export async function telaSemGrupo(usuario, aoEntrar, aviso = '') {
 
 export function telaAviso(titulo, texto, usuario) {
   mostrar(
-    el('div', { class: 'convite-topo' }, el('div', { class: 'logo-ex', text: 'EX' })),
+    el('div', { class: 'convite-topo' }, el('div', { class: 'logo-ex', attrs: { role: 'img', 'aria-label': 'Exilados' } })),
     el('h1', { text: titulo }),
     el('p', { class: 'subtitulo', text: texto }),
     el('button', { class: 'botao cheio cinza', text: 'Sair da conta', onclick: sair }),

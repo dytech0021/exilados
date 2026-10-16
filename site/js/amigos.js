@@ -125,7 +125,7 @@ function corpoAmigos(corpo) {
   if (aba === 'online' || aba === 'todos') {
     const lista = ordenarPorNome(aba === 'online' ? meus.filter((m) => statusDe(m.user_id) !== 'offline') : meus);
     if (!lista.length) {
-      return limpar(corpo, el('div', { class: 'vazio-amigos' }, el('div', { class: 'logo-ex', text: 'EX' }),
+      return limpar(corpo, el('div', { class: 'vazio-amigos' }, el('div', { class: 'logo-ex', attrs: { role: 'img', 'aria-label': 'Exilados' } }),
         el('p', { text: aba === 'online' ? 'Nenhum amigo online agora.' : 'Você ainda não tem amigos aqui. Adicione alguém do grupo.' }),
         el('button', { class: 'botao', text: 'Adicionar amigo', onclick: () => { aba = 'adicionar'; desenharAmigos(partes.centro, partes.topo); } })));
     }
@@ -136,7 +136,7 @@ function corpoAmigos(corpo) {
     const recebidos = pedidosRecebidos();
     const enviados = pedidosEnviados();
     if (!recebidos.length && !enviados.length) {
-      return limpar(corpo, el('div', { class: 'vazio-amigos' }, el('div', { class: 'logo-ex', text: 'EX' }), el('p', { text: 'Nenhum pedido de amizade pendente.' })));
+      return limpar(corpo, el('div', { class: 'vazio-amigos' }, el('div', { class: 'logo-ex', attrs: { role: 'img', 'aria-label': 'Exilados' } }), el('p', { text: 'Nenhum pedido de amizade pendente.' })));
     }
     const pessoa = (id) => estado.membros.get(id) || { user_id: id, nome: 'Alguém' };
     return limpar(corpo,

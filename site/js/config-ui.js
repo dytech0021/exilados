@@ -22,7 +22,7 @@ function paginaConta(secao) {
   const seletor = el('input', { type: 'file', accept: 'image/*', hidden: true });
   const nome = el('input', { class: 'entrada', value: meu.nome, maxLength: 32, attrs: { 'aria-label': 'Nome no grupo' } });
   const faixa = el('div', { class: 'faixa-cor' });
-  faixa.style.backgroundColor = '#c0662b';
+  faixa.style.backgroundColor = 'var(--lavanda)';
   const campoId = el('span', { text: '...' });
   sb.rpc('exilados_meu_id').then(({ data }) => {
     if (data) {

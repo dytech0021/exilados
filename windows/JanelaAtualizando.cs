@@ -27,14 +27,19 @@ internal sealed class JanelaAtualizando : Form
         {
             var g = e.Graphics;
             g.SmoothingMode = SmoothingMode.AntiAlias;
-            g.TextRenderingHint = System.Drawing.Text.TextRenderingHint.AntiAliasGridFit;
             g.Clear(Visual.Painel);
             using var forma = Arredondado(new Rectangle(0, 0, logo.Width - 1, logo.Height - 1), Px(28));
-            using var laranja = new SolidBrush(Visual.Laranja);
-            g.FillPath(laranja, forma);
-            using var fonte = Visual.Fonte(26f, FontStyle.Bold);
-            TextRenderer.DrawText(g, "EX", fonte, new Rectangle(0, 0, logo.Width, logo.Height), Color.White,
-                TextFormatFlags.HorizontalCenter | TextFormatFlags.VerticalCenter);
+            using var lavanda = new SolidBrush(Visual.Lavanda);
+            g.FillPath(lavanda, forma);
+            using var roxo = new Pen(Visual.RoxoMarca, logo.Width * 0.16f)
+            {
+                StartCap = LineCap.Round,
+                EndCap = LineCap.Round,
+                LineJoin = LineJoin.Round,
+            };
+            PointF P(float x, float y) => new(logo.Width * x, logo.Height * y);
+            g.DrawBezier(roxo, P(.25f, .23f), P(.40f, .34f), P(.60f, .66f), P(.75f, .77f));
+            g.DrawBezier(roxo, P(.75f, .23f), P(.60f, .34f), P(.40f, .66f), P(.25f, .77f));
         };
         _texto = new Label
         {

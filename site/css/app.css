@@ -23,7 +23,7 @@
   --vermelho: #f23f43;
   --vermelho-escuro: #da373c;
   --amarelo: #f0b232;
-  --laranja: #c0662b;
+  --lavanda: #bdaaff;
   --cinza: #80848e;
   --raio: 4px;
   --fonte: "gg sans", "Segoe UI", "Noto Sans", system-ui, -apple-system, Roboto, "Helvetica Neue", Arial, sans-serif;
@@ -104,8 +104,9 @@ svg.icone { width: 20px; height: 20px; flex: none; fill: currentColor; display: 
   gap: 16px; background: var(--trilho); color: var(--texto-fraco); font-size: 14px;
 }
 .logo-ex {
-  width: 72px; height: 72px; border-radius: 24px; background: var(--laranja); color: #fff;
-  display: flex; align-items: center; justify-content: center; font-weight: 800; font-size: 26px; letter-spacing: -.02em;
+  width: 72px; height: 72px; border-radius: 24px;
+  background: url('../icones/icone-192.png?v=2') center / contain no-repeat;
+  color: transparent; font-size: 0;
 }
 #carregando .logo-ex { animation: pulsar 1.4s ease-in-out infinite; }
 @keyframes pulsar { 50% { transform: scale(.92); opacity: .8; } }
@@ -154,8 +155,13 @@ svg.icone { width: 20px; height: 20px; flex: none; fill: currentColor; display: 
 }
 .trilho-botao svg.icone { width: 28px; height: 28px; }
 .trilho-item:hover .trilho-botao, .trilho-item.ativo .trilho-botao { border-radius: 16px; background: var(--destaque); color: #fff; }
-.trilho-botao.grupo { background: var(--laranja); color: #fff; }
-.trilho-item:hover .trilho-botao.grupo, .trilho-item.ativo .trilho-botao.grupo { background: var(--laranja); }
+.trilho-botao.grupo {
+  border-radius: 16px; background: url('../icones/icone-192.png?v=2') center / cover no-repeat;
+  color: transparent; font-size: 0;
+}
+.trilho-item:hover .trilho-botao.grupo, .trilho-item.ativo .trilho-botao.grupo {
+  background-color: transparent;
+}
 .trilho-separador { width: 32px; height: 2px; border-radius: 1px; background: #35363c; flex: none; }
 .trilho-botao.baixar { color: var(--verde); }
 .trilho-item:hover .trilho-botao.baixar { background: var(--verde); color: #fff; }

@@ -251,7 +251,7 @@ export function cartaoPerfil(id, x, y) {
   const live = liveDe(id);
   const souEu = id === meuId();
   const faixa = el('div', { class: 'faixa-cor' });
-  faixa.style.backgroundColor = '#c0662b';
+  faixa.style.backgroundColor = 'var(--lavanda)';
   // O ID de cada membro (para achar amigos pelo número); carregado à parte.
   const linhaId = el('div', { class: 'papel' });
   sb.from('exilados_ids').select('codigo').eq('user_id', id).maybeSingle()

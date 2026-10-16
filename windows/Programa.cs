@@ -91,6 +91,7 @@ internal static class Programa
             janela.Close();
         }
         using var mostrar = new EventWaitHandle(false, EventResetMode.AutoReset);
+        Salvar(new JanelaAtualizando("Atualizando..."), "atualizando.png");
         Salvar(new JanelaEntrar("pessoa@exemplo.com"), "entrar.png");
         var bandeja = new Bandeja(true, false, false, mostrar);
         bandeja.Configuracao.Nome = "Dyego";
