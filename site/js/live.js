@@ -1,7 +1,7 @@
 // Assistir a uma live no site: vídeo por WebRTC (WHEP) do MediaMTX, com a permissão de leitura que o
 // exilados-api entrega a membros ativos. Reconecta sozinho; avisa "A live terminou" quando ela acaba.
 import { AO_VIVO } from './config.js';
-import { agoraServidor, estado, ouvir } from './estado.js';
+import { agoraServidor, estado, meuId, ouvir } from './estado.js';
 import { liveNoAr } from './presenca.js';
 import { api } from './supa.js';
 import { botaoIcone, el, icone, limpar } from './ui.js';
@@ -103,6 +103,7 @@ async function conectar(a) {
   conexao.ontrack = (e) => {
     fluxo.addTrack(e.track);
     if (a.video.srcObject !== fluxo) a.video.srcObject = fluxo;
+    if (a.propria) a.video.muted = true;
     a.video.play().catch(() => {
       // O navegador não deixou tocar com som: começa mudo e oferece o som.
       a.video.muted = true;
@@ -171,12 +172,14 @@ function telaCheia(a) {
 /** Monta a live de `usuario` em `corpo`. `aoFechar` volta para a tela anterior. */
 export function montarLive(corpo, usuario, aoFechar) {
   fecharLive();
-  const video = el('video', { autoplay: true, playsInline: true, attrs: { playsinline: true } });
+  // A própria live toca sem som: o programa capta o som do computador, e o som dela voltaria para a live (retorno).
+  const propria = usuario === meuId();
+  const video = el('video', { autoplay: true, playsInline: true, muted: propria, attrs: { playsinline: true } });
   const sobre = el('div', { class: 'sobre' });
   const assistindo = el('span');
   const faixaVolume = el('input', { type: 'range', min: 0, max: 100, value: 100, attrs: { 'aria-label': 'Volume da live' } });
   const a = {
-    usuario, video, sobre, assistindo, faixaVolume, aoFechar, pararOuvir: [], encerrada: false, pc: null, sessao: null,
+    usuario, propria, video, sobre, assistindo, faixaVolume, aoFechar, pararOuvir: [], encerrada: false, pc: null, sessao: null,
   };
   a.botaoSom = botaoIcone('som', 'Silenciar', () => {
     video.muted = !video.muted;
@@ -191,7 +194,7 @@ export function montarLive(corpo, usuario, aoFechar) {
   });
   const botaoTela = botaoIcone('telaCheia', 'Tela cheia', () => telaCheia(a));
   const barra = el('div', { class: 'barra' },
-    a.botaoSom, faixaVolume,
+    propria ? el('span', { class: 'rotulo', text: 'Sua live, sem som aqui para não dar retorno' }) : [a.botaoSom, faixaVolume],
     el('span', { class: 'assistindo', attrs: { title: 'Assistindo agora' } }, icone('olho'), assistindo),
     botaoTela);
   a.palco = el('div', { class: 'live' }, video, sobre, barra);
