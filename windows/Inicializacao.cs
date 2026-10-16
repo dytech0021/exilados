@@ -12,9 +12,12 @@ internal static class Inicializacao
     private const string Nome = "Exilados";
     public const string Argumento = "--inicio";
 
+    /// <summary>Desligada nas capturas de conferência, que não podem trocar o programa que abre com o Windows.</summary>
+    public static bool Ativa { get; set; } = true;
+
     public static void Aplicar(bool ligada)
     {
-        if (!Atualizacao.ArquivoUnico) return;
+        if (!Ativa || !Atualizacao.ArquivoUnico) return;
         try
         {
             using var run = Registry.CurrentUser.CreateSubKey(Chave);

@@ -5,6 +5,7 @@ import {
 } from './estado.js';
 import { dataPorExtenso, formatarId, ordenarPorNome } from './formato.js';
 import { liveNoAr } from './presenca.js';
+import { abrirTransmitir, noPrograma } from './programa.js';
 import { api, sb } from './supa.js';
 import {
   aoSegurar, avatar, botaoIcone, confirmar, el, erro, icone, limpar, menu, posicionar,
@@ -93,7 +94,9 @@ export function desenharTopoGrupo(topo) {
       const r = topo.getBoundingClientRect();
       menu([
         { rotulo: 'Convidar pessoas', icone: 'addAmigo', fn: () => nav.convidar() },
-        { rotulo: 'Transmitir (programa do Windows)', icone: 'tela', fn: () => nav.abrirConfig('transmitir') },
+        noPrograma
+          ? { rotulo: 'Transmitir', icone: 'tela', fn: abrirTransmitir }
+          : { rotulo: 'Transmitir (programa do Windows)', icone: 'tela', fn: () => nav.abrirConfig('transmitir') },
         souDono() ? { rotulo: 'Salas do grupo', icone: 'engrenagem', fn: () => nav.abrirConfig('salas') } : null,
         souDono() ? { rotulo: 'Membros do grupo', icone: 'pessoas', fn: () => nav.abrirConfig('membros') } : null,
       ], r.left + 10, r.bottom + 6);

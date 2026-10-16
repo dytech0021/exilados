@@ -15,6 +15,7 @@ import {
 import { cartaoPerfil, desenharSalas, desenharTopoGrupo, iniciarGrupo } from './grupo.js';
 import { fecharLive, montarLive } from './live.js';
 import { liveNoAr } from './presenca.js';
+import { iniciarPrograma, noPrograma } from './programa.js';
 import { conferir, sb } from './supa.js';
 import { fecharTela, montarTela } from './tela.js';
 import {
@@ -292,10 +293,10 @@ async function abrirApp() {
   await conectar();
 }
 
-/** Botão de baixar o programa no trilho (como o "Baixar aplicativos" do Discord): o programa só roda no Windows. */
+/** Botão de baixar o programa no trilho (como o "Baixar aplicativos" do Discord): só no Windows e fora do próprio programa. */
 function botaoBaixar() {
   const windows = navigator.userAgentData?.platform === 'Windows' || /Windows NT/.test(navigator.userAgent);
-  if (!windows) return;
+  if (!windows || noPrograma) return;
   $('trilho-baixar').hidden = false;
   $('trilho-baixar-separador').hidden = false;
   const botao = $('baixar-programa');
@@ -346,6 +347,13 @@ async function iniciar() {
   // Um link de convite aberto com o site já aberto nesta aba só troca o "#": recomeça para ler o convite.
   window.addEventListener('hashchange', () => { if (/convite=/.test(location.hash)) location.reload(); });
   const codigo = lerConviteDaUrl();
+  iniciarPrograma({
+    sessao: async () => {
+      const { data: { session: s } } = await sb.auth.getSession();
+      return s ? { token: s.access_token, usuario: s.user.id, email: s.user.email || '', nome: estado.membros.get(s.user.id)?.nome || '' } : null;
+    },
+    ocupado: () => voz.voz.situacao !== 'desligada' || assistindo(estado.vista?.tipo),
+  });
   sb.auth.onAuthStateChange((evento, sessao) => {
     if (evento === 'PASSWORD_RECOVERY') setTimeout(telaNovaSenha);
     else if (evento === 'SIGNED_IN' && sessao && !estado.eu) setTimeout(() => decidir(sessao.user));

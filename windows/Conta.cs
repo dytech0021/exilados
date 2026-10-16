@@ -13,7 +13,7 @@ namespace Exilados;
 /// Login na conta do FilaBox (Supabase dele), com e-mail e senha ou Google, a mesma usada no site do Exilados.
 /// O token de renovação fica guardado protegido pelo Windows; o de acesso é renovado sozinho antes de vencer.
 /// </summary>
-internal sealed class Conta
+internal sealed class Conta : IAcesso
 {
     public const string SupabaseUrl = "https://kobtvgqnitdeviddvymm.supabase.co";
     /// <summary>Chave publicável do Supabase do FilaBox (a mesma que o site entrega a qualquer navegador).</summary>
@@ -21,6 +21,7 @@ internal sealed class Conta
     public const string Site = "https://filabox3d.com.br/exilados/";
     /// <summary>Porta deste computador para onde o login com Google volta (autorizada no Supabase).</summary>
     public const int PortaGoogle = 53682;
+    public static readonly string RetornoGoogle = $"http://127.0.0.1:{PortaGoogle}/exilados";
 
     private static readonly HttpClient Http = new() { Timeout = TimeSpan.FromSeconds(30) };
     private readonly SemaphoreSlim _travaRenovar = new(1, 1);
@@ -49,14 +50,23 @@ internal sealed class Conta
     {
         string verificador = Base64Url(RandomNumberGenerator.GetBytes(32));
         string desafio = Base64Url(SHA256.HashData(Encoding.ASCII.GetBytes(verificador)));
-        string retorno = $"http://127.0.0.1:{PortaGoogle}/exilados";
+        string codigo = await CodigoDoGoogleAsync($"{SupabaseUrl}/auth/v1/authorize?provider=google&redirect_to={Uri.EscapeDataString(RetornoGoogle)}" +
+                                                  $"&code_challenge={desafio}&code_challenge_method=s256", ct);
+        return DaSessao(await TokenAsync("pkce", new { auth_code = codigo, code_verifier = verificador }, ct));
+    }
+
+    /// <summary>
+    /// Abre <paramref name="autorizar"/> (o login do Google, voltando para <see cref="RetornoGoogle"/>) no navegador e
+    /// devolve o código que volta numa porta deste computador. Quem pediu o login troca o código pela sessão.
+    /// </summary>
+    public static async Task<string> CodigoDoGoogleAsync(string autorizar, CancellationToken ct)
+    {
         var escuta = new TcpListener(IPAddress.Loopback, PortaGoogle);
         try { escuta.Start(); }
         catch (SocketException) { throw new ExiladosException($"A porta {PortaGoogle} deste computador está ocupada (talvez o Ponte esteja esperando um login). Tente de novo em seguida."); }
         try
         {
-            AbrirNavegador($"{SupabaseUrl}/auth/v1/authorize?provider=google&redirect_to={Uri.EscapeDataString(retorno)}" +
-                           $"&code_challenge={desafio}&code_challenge_method=s256");
+            AbrirNavegador(autorizar);
             using var prazo = CancellationTokenSource.CreateLinkedTokenSource(ct);
             prazo.CancelAfter(TimeSpan.FromMinutes(5));
             while (true)
@@ -72,7 +82,7 @@ internal sealed class Conta
                     var (codigo, erro) = await LerRetornoAsync(cliente, prazo.Token);
                     if (codigo is null && erro is null) continue;
                     if (erro is not null) throw new ExiladosException("O Google não concluiu o login: " + erro);
-                    return DaSessao(await TokenAsync("pkce", new { auth_code = codigo, code_verifier = verificador }, ct));
+                    return codigo!;
                 }
             }
         }

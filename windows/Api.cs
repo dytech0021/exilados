@@ -9,7 +9,7 @@ namespace Exilados;
 internal sealed record PermissaoLive(string Caminho, string Usuario, string Senha, string Rtsps);
 
 /// <summary>Chamadas ao exilados-api (https://filabox3d.com.br/exilados/api), sempre com o login da pessoa.</summary>
-internal sealed class Api(Conta conta)
+internal sealed class Api(IAcesso conta)
 {
     public static string Base { get; set; } = "https://filabox3d.com.br/exilados/api";
     private static readonly HttpClient Http = new() { Timeout = TimeSpan.FromSeconds(20) };

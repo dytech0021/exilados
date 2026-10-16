@@ -4,6 +4,7 @@ import { BASE, PASTA_IMAGENS } from './config.js';
 import { avisar, estado, eu, meuId, ouvir, souDono } from './estado.js';
 import { formatarId, lerId, limparNome, ordenarPorNome } from './formato.js';
 import { conferirArquivo, LADO_PERFIL, reduzirImagem } from './imagens.js';
+import { abrirTransmitir, noPrograma } from './programa.js';
 import { api, conferir, sb } from './supa.js';
 import { sair } from './auth.js';
 import {
@@ -307,6 +308,16 @@ function paginaMembros(secao) {
 // ---------- Transmitir (programa do Windows) ----------
 
 async function paginaTransmitir(secao) {
+  if (noPrograma) {
+    limpar(secao,
+      el('h2', { text: 'Transmitir' }),
+      el('p', { class: 'ajuda', text: 'As lives saem deste programa: ele transmite uma tela (com o som do computador) ou um programa (só o som dele, no Windows 11), e o grupo assiste aqui, com menos de 1 segundo de atraso. Quem está ao vivo aparece com a etiqueta AO VIVO.' }),
+      el('button', { class: 'botao', text: 'Abrir a janela de transmitir', onclick: abrirTransmitir }),
+      el('p', { class: 'ajuda', text: `Versão do programa: ${window.exiladosPrograma.versao}.` }),
+      el('h3', { text: 'Como usar' }),
+      el('p', { class: 'ajuda', text: 'Escolha a tela ou o programa e a qualidade, e clique em Entrar ao vivo. Fechar esta janela não fecha o programa: ele fica perto do relógio (a voz continua) e se atualiza sozinho quando você não está numa sala de voz.' }));
+    return;
+  }
   const versao = el('span', { text: '' });
   limpar(secao,
     el('h2', { text: 'Transmitir' }),

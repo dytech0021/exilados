@@ -5,17 +5,18 @@
 # cifrada com a senha do dono. A senha vem de EXILADOS_SENHA_CHAVE, do arquivo protegido deste PC
 # (%APPDATA%\Exilados-publicar\senha.dpapi, criado na primeira vez) ou é pedida aqui.
 # Antes de publicar, suba o número da versão em Exilados.csproj (<Version>).
+# Em outro PC, com outra chave do servidor: -SshChave ~\.ssh\filabox_vps -SshConhecidos ~\.ssh\known_hosts
 param(
     [string]$Chave = (Join-Path $env:OneDrive 'Exilados\chave-atualizacao.exk'),
-    [string]$Servidor = '177.153.35.193'
+    [string]$Servidor = '177.153.35.193',
+    [string]$SshChave = (Join-Path $HOME '.ssh\filabox3d_deploy_ed25519'),
+    [string]$SshConhecidos = (Join-Path $HOME '.ssh\filabox3d_known_hosts')
 )
 $ErrorActionPreference = 'Stop'
 Add-Type -AssemblyName System.Security
 
 $aqui = $PSScriptRoot
-$sshChave = Join-Path $HOME '.ssh\filabox3d_deploy_ed25519'
-$sshConhecidos = Join-Path $HOME '.ssh\filabox3d_known_hosts'
-$ssh = @('-i', $sshChave, '-o', "UserKnownHostsFile=$sshConhecidos", '-o', 'BatchMode=yes')
+$ssh = @('-i', $SshChave, '-o', "UserKnownHostsFile=$SshConhecidos", '-o', 'BatchMode=yes')
 $pastaRemota = '/var/www/exilados/atualizacao'
 $arquivoSenha = Join-Path $env:APPDATA 'Exilados-publicar\senha.dpapi'
 

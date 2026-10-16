@@ -9,13 +9,27 @@
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
     <AssemblyName>Exilados</AssemblyName>
     <RootNamespace>Exilados</RootNamespace>
-    <Version>1.0.2</Version>
+    <Version>1.0.3</Version>
     <Product>Exilados</Product>
-    <Description>Transmitir para o grupo Exilados</Description>
+    <Description>Grupo Exilados: texto, voz e lives</Description>
     <ApplicationIcon>exilados.ico</ApplicationIcon>
     <ApplicationHighDpiMode>PerMonitorV2</ApplicationHighDpiMode>
     <ApplicationVisualStyles>true</ApplicationVisualStyles>
     <SatelliteResourceLanguages>en</SatelliteResourceLanguages>
+    <!-- O carregador nativo do WebView2 vai dentro do arquivo único. -->
+    <IncludeNativeLibrariesForSelfExtract>true</IncludeNativeLibrariesForSelfExtract>
   </PropertyGroup>
+
+  <ItemGroup>
+    <!-- Janela principal com o site (o motor é o WebView2 do Windows, que vem com o Edge). -->
+    <PackageReference Include="Microsoft.Web.WebView2" Version="1.0.4258.31" />
+  </ItemGroup>
+
+  <!-- O pacote também referencia a parte WPF do WebView2, que este programa (Windows Forms) não usa. -->
+  <Target Name="SemWebView2Wpf" BeforeTargets="ResolveAssemblyReferences">
+    <ItemGroup>
+      <Reference Remove="@(Reference)" Condition="'%(Filename)' == 'Microsoft.Web.WebView2.Wpf'" />
+    </ItemGroup>
+  </Target>
 
 </Project>

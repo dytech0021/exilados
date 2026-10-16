@@ -17,6 +17,11 @@ internal sealed class Config
     /// <summary>"tela" ou "programa".</summary>
     public string Fonte { get; set; } = "tela";
     public string Tela { get; set; } = "";
+    /// <summary>Posição e tamanho da janela principal ("x,y,largura,altura"), em pixels da tela.</summary>
+    public string Janela { get; set; } = "";
+    public bool JanelaMaximizada { get; set; }
+    /// <summary>Já explicou que fechar a janela deixa o programa perto do relógio.</summary>
+    public bool AvisouBandeja { get; set; }
 
     private static readonly JsonSerializerOptions Opcoes = new() { WriteIndented = true };
 

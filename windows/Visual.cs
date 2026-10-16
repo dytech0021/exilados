@@ -42,12 +42,14 @@ internal static class Visual
         janela.AutoSizeMode = AutoSizeMode.GrowAndShrink;
         janela.Padding = new Padding(24, 20, 24, 20);
         janela.MinimumSize = new Size(largura, 0);
-        janela.HandleCreated += (_, _) =>
-        {
-            int sim = 1;
-            DwmSetWindowAttribute(janela.Handle, 20, ref sim, sizeof(int)); // barra de título escura
-        };
+        BarraEscura(janela);
     }
+
+    public static void BarraEscura(Form janela) => janela.HandleCreated += (_, _) =>
+    {
+        int sim = 1;
+        DwmSetWindowAttribute(janela.Handle, 20, ref sim, sizeof(int)); // barra de título escura
+    };
 
     public static FlowLayoutPanel Coluna(int largura) => new()
     {

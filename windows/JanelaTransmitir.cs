@@ -40,7 +40,7 @@ internal sealed class JanelaTransmitir : Form
             _situacao,
             _principal,
             _aviso,
-            Visual.Link("Abrir o Exilados no navegador", () => Conta.AbrirNavegador(Conta.Site)),
+            Visual.Link("Abrir o Exilados", bandeja.AbrirExilados),
         ]);
         Controls.Add(coluna);
         coluna.Location = new Point(Padding.Left, Padding.Top);
@@ -125,7 +125,7 @@ internal sealed class JanelaTransmitir : Form
             _principal.Text = "Entrar ao vivo";
             _principal.BackColor = Visual.Vermelho;
             _principal.Enabled = true;
-            _aviso.Text = _bandeja.Configuracao.Nome.Length > 0 ? $"Conectado como {_bandeja.Configuracao.Nome}." : "";
+            _aviso.Text = _bandeja.NomeConectado.Length > 0 ? $"Conectado como {_bandeja.NomeConectado}." : "";
         }
         Habilitar();
     }
