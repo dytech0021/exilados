@@ -166,9 +166,31 @@ export function desenharPainelVoz(painel) {
     el('div', { class: 'linha' },
       el('div', { class: 'estado' },
         el('strong', { class: v.situacao === 'conectada' ? '' : 'aguardando' }, icone('ondas'), textos[v.situacao] || ''),
-        el('span', { text: `${nomeDaSala(v.sala)} / Exilados` })),
+        el('span', { text: `${nomeDaSala(v.sala)} / Exilados${voz.rotaAtual() ? ` · ${voz.rotaAtual()}` : ''}` })),
+      botaoIcone('fone', voz.ANDROID ? 'Fone ou celular' : 'Microfone', (e) => menuDeAparelhos(e.currentTarget)),
       botaoIcone('desligar', 'Sair da sala de voz', () => voz.sair().catch(erro))),
     v.semMicrofone ? el('div', { class: 'aviso-mic', text: 'Sem microfone: só ouvindo.' }) : null);
+}
+
+/** Menu rápido do painel de voz: por onde a voz entra (e, no Android, por onde o som sai também). */
+async function menuDeAparelhos(botao) {
+  const r = botao.getBoundingClientRect();
+  let entradas = [];
+  try {
+    ({ entradas } = await voz.listarDispositivos());
+  } catch {
+    entradas = [];
+  }
+  const escolhido = voz.preferencias().entrada || '';
+  const lista = entradas.filter((d) => d.deviceId !== 'default');
+  const marcar = (id, texto) => `${(escolhido || '') === id ? '✓ ' : ''}${texto}`;
+  menu([
+    { rotulo: voz.ANDROID ? 'Usar o fone ou o celular' : 'Microfone', titulo: true },
+    { rotulo: marcar('', voz.ANDROID ? 'Automático (fone, se houver)' : 'Padrão do sistema'), fn: () => voz.definirEntrada('').catch(erro) },
+    ...lista.map((d, i) => ({ rotulo: marcar(d.deviceId, voz.nomeDoAparelho(d, i)), fn: () => voz.definirEntrada(d.deviceId).catch(erro) })),
+    'separador',
+    { rotulo: 'Mais opções de voz e áudio', fn: () => nav.abrirConfig('voz') },
+  ], r.left, r.top - 8 - 40 * (lista.length + 3));
 }
 
 // ---------- cartão de perfil e menu de um membro ----------
@@ -221,7 +243,7 @@ export function menuMembro(id, x, y) {
     !souEu && naMinhaSala ? 'separador' : null,
     !souEu && naMinhaSala ? {
       rotulo: 'Volume do usuário',
-      faixa: { min: 0, max: 200, valor: voz.volumeDe(id), aoMudar: (v) => voz.definirVolume(id, v) },
+      faixa: { min: 0, max: voz.VOLUME_MAXIMO, valor: Math.min(voz.volumeDe(id), voz.VOLUME_MAXIMO), aoMudar: (v) => voz.definirVolume(id, v) },
     } : null,
     !souEu && voz.volumeDe(id) !== 100 ? { rotulo: 'Voltar o volume a 100%', fn: () => voz.definirVolume(id, 100) } : null,
     souDono() && !souEu ? 'separador' : null,

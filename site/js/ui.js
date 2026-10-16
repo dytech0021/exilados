@@ -199,6 +199,8 @@ export function menu(itens, x, y) {
     if (!item) continue;
     if (item === 'separador') {
       caixa.append(el('div', { class: 'separador' }));
+    } else if (item.titulo) {
+      caixa.append(el('div', { class: 'rotulo', text: item.rotulo }));
     } else if (item.faixa) {
       const valor = el('span', { text: `${item.faixa.valor}%` });
       const faixa = el('input', {

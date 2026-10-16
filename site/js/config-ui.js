@@ -94,7 +94,7 @@ async function sairDaConta() {
 
 async function paginaVoz(secao) {
   const p = voz.preferencias();
-  const entrada = el('select', { class: 'entrada', attrs: { 'aria-label': 'Dispositivo de entrada' } });
+  const entrada = el('select', { class: 'entrada', attrs: { 'aria-label': voz.ANDROID ? 'Microfone e som' : 'Dispositivo de entrada' } });
   const saida = el('select', { class: 'entrada', attrs: { 'aria-label': 'Dispositivo de saída' } });
   const volume = el('input', { type: 'range', class: 'faixa-config', min: 0, max: 200, value: p.volumeEntrada, attrs: { 'aria-label': 'Volume de entrada' } });
   const valorVolume = el('span', { text: `${p.volumeEntrada}%` });
@@ -106,19 +106,24 @@ async function paginaVoz(secao) {
 
   const preencher = async () => {
     const { entradas, saidas, semNomes } = await voz.listarDispositivos();
-    const opcao = (d, i, tipo) => el('option', { value: d.deviceId, text: d.label || `${tipo} ${i + 1}` });
-    limpar(entrada, el('option', { value: '', text: 'Padrão do sistema' }), entradas.filter((d) => d.deviceId !== 'default').map((d, i) => opcao(d, i, 'Microfone')));
+    const opcao = (d, i, tipo) => el('option', { value: d.deviceId, text: tipo === 'Microfone' ? voz.nomeDoAparelho(d, i) : (d.label || `${tipo} ${i + 1}`) });
+    limpar(entrada, el('option', { value: '', text: voz.ANDROID ? 'Automático (fone, se houver)' : 'Padrão do sistema' }),
+      entradas.filter((d) => d.deviceId !== 'default').map((d, i) => opcao(d, i, 'Microfone')));
     entrada.value = entradas.some((d) => d.deviceId === p.entrada) ? p.entrada : '';
     if (voz.saidaDisponivel()) {
       limpar(saida, el('option', { value: '', text: 'Padrão do sistema' }), saidas.filter((d) => d.deviceId !== 'default').map((d, i) => opcao(d, i, 'Saída')));
       saida.value = saidas.some((d) => d.deviceId === p.saida) ? p.saida : '';
     } else {
-      limpar(saida, el('option', { text: 'Segue a saída do sistema' }));
+      limpar(saida, el('option', { text: voz.ANDROID ? 'A mesma do microfone escolhido' : 'Segue a saída do sistema' }));
       saida.disabled = true;
     }
+    const temFone = entradas.some((d) => /bluetooth/i.test(d.label || ''));
     limpar(avisoTexto,
       semNomes ? ['Os nomes dos aparelhos aparecem depois de liberar o microfone. ', el('a', { href: '#', text: 'Liberar agora', onclick: async (e) => { e.preventDefault(); try { await voz.liberarNomes(); preencher(); } catch { erro(new Error('O microfone foi bloqueado. Libere no cadeado ao lado do endereço.')); } } })] : null,
-      voz.saidaDisponivel() ? null : 'Este navegador não deixa escolher a saída de som (Safari e iPhone): ela segue a do sistema.');
+      voz.ANDROID
+        ? ['No Android, a escolha vale para o microfone e o som juntos: "Fone Bluetooth" usa o microfone e o som do fone; "Alto-falante do celular" usa os do celular.',
+          temFone ? null : ' Não aparece o fone Bluetooth? Nas configurações do Android, em Apps → Chrome → Permissões, libere "Dispositivos por perto" e entre de novo na sala.']
+        : voz.saidaDisponivel() ? null : 'Este navegador não deixa escolher a saída de som (Safari e iPhone): ela segue a do sistema.');
   };
 
   entrada.addEventListener('change', async () => {
@@ -154,7 +159,7 @@ async function paginaVoz(secao) {
   limpar(secao,
     el('h2', { text: 'Voz e áudio' }),
     el('div', { class: 'duas-colunas' },
-      el('label', { class: 'campo' }, el('span', { text: 'Dispositivo de entrada' }), entrada),
+      el('label', { class: 'campo' }, el('span', { text: voz.ANDROID ? 'Microfone e som (fone ou celular)' : 'Dispositivo de entrada' }), entrada),
       el('label', { class: 'campo' }, el('span', { text: 'Dispositivo de saída' }), saida)),
     avisoTexto,
     el('label', { class: 'campo' }, el('span', {}, 'Volume de entrada ', valorVolume), volume),

@@ -10,6 +10,15 @@ import { api } from './supa.js';
 import { aviso } from './ui.js';
 
 export const voz = { situacao: 'desligada', sala: null, mudo: false, surdo: false, semMicrofone: false };
+
+/**
+ * No Android, o Chrome trata o microfone e o som da chamada como uma rota só (fone Bluetooth, fone com fio,
+ * alto-falante ou celular no ouvido): escolher o microfone escolhe também por onde sai o som. Para isso o som da
+ * sala toca pelo canal de chamada (sem a mixagem do Web Audio, que mandaria o som pelo canal de mídia e misturaria
+ * fone e celular), e o volume de cada pessoa vai até 100%.
+ */
+export const ANDROID = typeof navigator !== 'undefined' && /Android/i.test(navigator.userAgent);
+export const VOLUME_MAXIMO = ANDROID ? 100 : 200;
 estado.falandoNaSala = new Set();
 
 let LK = null;
@@ -47,7 +56,7 @@ export function volumeDe(id) {
 }
 
 export function definirVolume(id, porcento) {
-  const valor = Math.max(0, Math.min(200, Math.round(porcento)));
+  const valor = Math.max(0, Math.min(VOLUME_MAXIMO, Math.round(porcento)));
   if (valor === 100) delete preferencias().volumes[id];
   else preferencias().volumes[id] = valor;
   guardar();
@@ -56,7 +65,7 @@ export function definirVolume(id, porcento) {
 
 function aplicarVolume(id) {
   const participante = sala?.remoteParticipants.get(id);
-  if (participante) participante.setVolume(voz.surdo ? 0 : volumeDe(id) / 100);
+  if (participante) participante.setVolume(voz.surdo ? 0 : Math.min(volumeDe(id), VOLUME_MAXIMO) / 100);
 }
 
 // ---------- LiveKit ----------
@@ -80,19 +89,50 @@ const restricoes = (deviceId) => ({
   channelCount: 1,
 });
 
+/** Nome do aparelho em português (no Android, o Chrome dá nomes de rota em inglês). */
+export function nomeDoAparelho(aparelho, i = 0) {
+  const rotulo = String(aparelho?.label || '');
+  if (!rotulo || aparelho.deviceId === 'default') return 'Padrão do sistema';
+  if (/bluetooth/i.test(rotulo)) return ANDROID ? 'Fone Bluetooth' : rotulo;
+  if (/speakerphone/i.test(rotulo)) return 'Alto-falante do celular';
+  if (/earpiece/i.test(rotulo)) return 'Celular no ouvido';
+  if (/wired headset/i.test(rotulo)) return 'Fone com fio';
+  if (/usb audio/i.test(rotulo)) return 'Áudio USB';
+  return rotulo || `Microfone ${i + 1}`;
+}
+
+const ehFone = (aparelho) => /bluetooth|headset|fone|airpods|buds/i.test(aparelho.label || '') && !/earpiece/i.test(aparelho.label || '');
+
+const capturar = (deviceId) => navigator.mediaDevices.getUserMedia({ audio: restricoes(deviceId) });
+
 async function abrirMicrofone() {
   const p = preferencias();
   let bruto;
   try {
-    bruto = await navigator.mediaDevices.getUserMedia({ audio: restricoes(p.entrada) });
+    bruto = await capturar(p.entrada);
   } catch (erro) {
     if (erro?.name === 'OverconstrainedError' && p.entrada) {
       // O microfone escolhido sumiu: usa o padrão.
-      bruto = await navigator.mediaDevices.getUserMedia({ audio: restricoes(null) });
+      bruto = await capturar(null);
     } else {
       throw erro;
     }
   }
+  // No Android, sem escolha feita: com um fone conectado, usa o microfone dele (e assim o som também sai nele).
+  if (ANDROID && !p.entrada) {
+    const fone = (await navigator.mediaDevices.enumerateDevices()).find((d) => d.kind === 'audioinput' && ehFone(d));
+    const atual = bruto.getAudioTracks()[0]?.getSettings?.().deviceId;
+    if (fone && fone.deviceId !== atual) {
+      try {
+        const doFone = await capturar(fone.deviceId);
+        bruto.getTracks().forEach((t) => t.stop());
+        bruto = doFone;
+      } catch {
+        // Fica no padrão.
+      }
+    }
+  }
+  const pista = bruto.getAudioTracks()[0];
   const ctx = new AudioContext();
   const fonte = ctx.createMediaStreamSource(bruto);
   const ganho = ctx.createGain();
@@ -104,7 +144,17 @@ async function abrirMicrofone() {
   ganho.connect(analisador);
   ganho.connect(destino);
   if (ctx.state === 'suspended') await ctx.resume().catch(() => {});
-  return { bruto, ctx, ganho, analisador, faixa: destino.stream.getAudioTracks()[0] };
+  return {
+    bruto, ctx, ganho, analisador,
+    faixa: destino.stream.getAudioTracks()[0],
+    aparelho: pista?.getSettings?.().deviceId || '',
+    nome: nomeDoAparelho({ label: pista?.label, deviceId: pista?.getSettings?.().deviceId }),
+  };
+}
+
+/** Por onde a voz está entrando agora ("Fone Bluetooth", "Alto-falante do celular"...), ou null fora da sala. */
+export function rotaAtual() {
+  return microfone?.nome || null;
 }
 
 function fecharMicrofone(m) {
@@ -114,22 +164,20 @@ function fecharMicrofone(m) {
   m.ctx.close().catch(() => {});
 }
 
-async function ligarMicrofone() {
-  try {
-    microfone = await abrirMicrofone();
-  } catch (erro) {
-    voz.semMicrofone = true;
-    mudou();
-    const negado = erro?.name === 'NotAllowedError' || erro?.name === 'SecurityError';
-    aviso(negado
-      ? 'O microfone foi bloqueado: você entrou só ouvindo. Libere o microfone no cadeado ao lado do endereço e entre de novo na sala.'
-      : 'Nenhum microfone encontrado: você entrou só ouvindo.', { tipo: 'erro', duracao: 10000 });
-    return;
-  }
+function avisarSemMicrofone(erro) {
+  voz.semMicrofone = true;
+  mudou();
+  const negado = erro?.name === 'NotAllowedError' || erro?.name === 'SecurityError';
+  aviso(negado
+    ? 'O microfone foi bloqueado: você entrou só ouvindo. Libere o microfone no cadeado ao lado do endereço e entre de novo na sala.'
+    : 'Nenhum microfone encontrado: você entrou só ouvindo.', { tipo: 'erro', duracao: 10000 });
+}
+
+/** Publica o microfone já aberto. Se a negociação falhar, tenta de novo; se não der, fica só ouvindo. */
+async function publicarMicrofone() {
+  if (!microfone) return;
   voz.semMicrofone = false;
   microfone.trilha = new LK.LocalAudioTrack(microfone.faixa, undefined, true);
-  // Publicar pode falhar se a negociação com o servidor cruzar com a chegada do áudio de quem já está na sala:
-  // tenta de novo; se não der, fica só ouvindo (a sala não cai por isso).
   const room = sala;
   for (let tentativa = 1; tentativa <= 3; tentativa += 1) {
     try {
@@ -140,6 +188,7 @@ async function ligarMicrofone() {
         audioPreset: LK.AudioPresets.speech,
       });
       if (voz.mudo || voz.surdo) await microfone.trilha.mute();
+      mudou();
       return;
     } catch (erro) {
       console.warn(`Exilados: o microfone não foi publicado (tentativa ${tentativa}):`, erro);
@@ -224,15 +273,32 @@ export async function entrar(salaId) {
   voz.sala = salaId;
   voz.situacao = 'conectando';
   mudou();
+  // O microfone abre antes de entrar na sala: no Android isso põe o celular em modo de chamada antes de o som da
+  // sala começar, e o som segue a mesma rota do microfone (fone ou celular).
+  const preparo = abrirMicrofone().then((mic) => ({ mic }), (erro) => ({ erro }));
   try {
-    const [LKC, permissao] = await Promise.all([carregarLiveKit(), api.chamar('/voz/entrar', { sala: salaId })]);
+    let LKC;
+    let permissao;
+    try {
+      [LKC, permissao] = await Promise.all([carregarLiveKit(), api.chamar('/voz/entrar', { sala: salaId })]);
+    } catch (erro) {
+      const { mic } = await preparo;
+      fecharMicrofone(mic);
+      throw erro;
+    }
     LK = LKC;
-    if (voz.sala !== salaId) return; // saiu ou trocou de sala enquanto conectava
+    const { mic, erro: erroMicrofone } = await preparo;
+    if (voz.sala !== salaId) { // saiu ou trocou de sala enquanto conectava
+      fecharMicrofone(mic);
+      return;
+    }
+    microfone = mic || null;
     const room = new LK.Room({
       adaptiveStream: false,
       dynacast: false,
       disconnectOnPageLeave: true,
-      webAudioMix: true,
+      // Fora do Android, o Web Audio permite volume de até 200% por pessoa e escolher a saída de som.
+      webAudioMix: !ANDROID,
       // O modo de conexão única (padrão novo da biblioteca) às vezes falha ao negociar no Chrome do Android
       // ("Transceiver not found based on m-line index"); o modo clássico, com uma conexão para enviar e outra para
       // receber, é o testado.
@@ -247,7 +313,8 @@ export async function entrar(salaId) {
     atualizarPresenca({ voz: salaId, mudo: voz.mudo || voz.surdo, surdo: voz.surdo });
     mudou();
     await room.startAudio().catch(() => {});
-    await ligarMicrofone();
+    if (microfone) await publicarMicrofone();
+    else avisarSemMicrofone(erroMicrofone);
   } catch (erro) {
     const room = sala;
     limpar();
@@ -318,7 +385,8 @@ export async function alternarSurdo() {
 
 // ---------- dispositivos (Configurações → Voz e áudio) ----------
 
-export const saidaDisponivel = () => typeof HTMLMediaElement !== 'undefined' && 'setSinkId' in HTMLMediaElement.prototype;
+// No Android a saída acompanha o microfone escolhido (a rota da chamada); lá não há o que escolher à parte.
+export const saidaDisponivel = () => !ANDROID && typeof HTMLMediaElement !== 'undefined' && 'setSinkId' in HTMLMediaElement.prototype;
 
 export async function listarDispositivos() {
   if (!navigator.mediaDevices?.enumerateDevices) return { entradas: [], saidas: [], semNomes: true };
@@ -337,7 +405,13 @@ export async function liberarNomes() {
 export async function definirEntrada(id) {
   preferencias().entrada = id || null;
   guardar();
-  if (!sala || !microfone?.trilha) return;
+  if (!sala) return;
+  // Na sala sem microfone (ele falhou antes): tenta abrir e publicar o escolhido.
+  if (!microfone?.trilha) {
+    microfone = await abrirMicrofone();
+    await publicarMicrofone();
+    return;
+  }
   const novo = await abrirMicrofone();
   await microfone.trilha.replaceTrack(novo.faixa, { userProvidedTrack: true });
   const velho = microfone;
@@ -345,6 +419,7 @@ export async function definirEntrada(id) {
   velho.bruto.getTracks().forEach((t) => t.stop());
   velho.ctx.close().catch(() => {});
   if (voz.mudo || voz.surdo) await microfone.trilha.mute();
+  mudou();
   avisar('microfoneTrocado');
 }
 
