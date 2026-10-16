@@ -1,15 +1,16 @@
 ﻿# Publica o Exilados no servidor: empacota api/, servidor/ e site/, envia e roda servidor/instalar.sh como root.
 # Uso: .\servidor\publicar.ps1   (precisa da chave SSH do servidor em ~\.ssh, a mesma do Ponte)
+# Em outro PC, com outra chave: .\servidor\publicar.ps1 -Chave ~\.ssh\filabox_vps -Conhecidos ~\.ssh\known_hosts
 param(
-    [string]$Servidor = '177.153.35.193'
+    [string]$Servidor = '177.153.35.193',
+    [string]$Chave = (Join-Path $HOME '.ssh\filabox3d_deploy_ed25519'),
+    [string]$Conhecidos = (Join-Path $HOME '.ssh\filabox3d_known_hosts')
 )
 $ErrorActionPreference = 'Stop'
 # Programas externos (ssh, scp, node, tar) escrevem andamento no stderr: confere-se o código de saída de cada um.
 $PSNativeCommandUseErrorActionPreference = $false
 
 $raiz = Split-Path -Parent $PSScriptRoot
-$chave = Join-Path $HOME '.ssh\filabox3d_deploy_ed25519'
-$conhecidos = Join-Path $HOME '.ssh\filabox3d_known_hosts'
 foreach ($arquivo in @($chave, $conhecidos)) {
     if (-not (Test-Path $arquivo)) { throw "Falta $arquivo (chave de acesso ao servidor)." }
 }

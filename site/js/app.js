@@ -280,6 +280,7 @@ async function abrirApp() {
     irPara(vistaAnterior?.tipo === 'conversa' ? vistaAnterior : { tipo: 'amigos' });
   });
   $('ir-grupo').addEventListener('click', () => irPara({ tipo: 'grupo', id: estado.vista.tipo === 'grupo' ? estado.vista.id : lembrada() }));
+  botaoBaixar();
   iniciarGrupo(nav, partes);
   iniciarAmigos(nav, partes);
   quandoClicarNoAutor((id, x, y) => cartaoPerfil(id, x, y));
@@ -289,6 +290,21 @@ async function abrirApp() {
   irPara({ tipo: 'grupo', id: lembrada() });
   if (celular()) painel('esquerda');
   await conectar();
+}
+
+/** Botão de baixar o programa no trilho (como o "Baixar aplicativos" do Discord): o programa só roda no Windows. */
+function botaoBaixar() {
+  const windows = navigator.userAgentData?.platform === 'Windows' || /Windows NT/.test(navigator.userAgent);
+  if (!windows) return;
+  $('trilho-baixar').hidden = false;
+  $('trilho-baixar-separador').hidden = false;
+  const botao = $('baixar-programa');
+  botao.href = `${BASE}atualizacao/Exilados.exe`;
+  limpar(botao, icone('baixar'));
+  botao.addEventListener('click', () => aviso('Baixando o Exilados para Windows. Abra o Exilados.exe e entre com a mesma conta daqui.', {
+    acao: { rotulo: 'Como usar', fn: () => abrirConfig('transmitir') },
+    duracao: 10000,
+  }));
 }
 
 function lembrada() {

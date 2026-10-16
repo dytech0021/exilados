@@ -157,6 +157,8 @@ svg.icone { width: 20px; height: 20px; flex: none; fill: currentColor; display: 
 .trilho-botao.grupo { background: var(--laranja); color: #fff; }
 .trilho-item:hover .trilho-botao.grupo, .trilho-item.ativo .trilho-botao.grupo { background: var(--laranja); }
 .trilho-separador { width: 32px; height: 2px; border-radius: 1px; background: #35363c; flex: none; }
+.trilho-botao.baixar { color: var(--verde); }
+.trilho-item:hover .trilho-botao.baixar { background: var(--verde); color: #fff; }
 .selo {
   position: absolute; right: 8px; bottom: -2px; min-width: 18px; height: 18px; padding: 0 5px; border-radius: 9px;
   background: var(--vermelho); color: #fff; font-size: 12px; font-weight: 700; line-height: 18px; text-align: center;
