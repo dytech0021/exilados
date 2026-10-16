@@ -507,7 +507,8 @@ export async function compartilharTela(qualidade = preferencias().qualidadeTela 
     fluxo.getTracks().forEach((p) => p.stop());
     return false;
   }
-  if (tela) await pararTela();
+  // Trocando o que é mostrado: tira a tela anterior do ar sem avisar que parou (quem assiste continua na tela).
+  if (tela) await pararTela({ trocando: true });
   const pistaVideo = fluxo.getVideoTracks()[0];
   const pistaSom = fluxo.getAudioTracks()[0] || null;
   // Jogos e vídeos: o navegador mantém a fluidez e, com internet fraca, reduz a resolução antes do fps.
@@ -550,15 +551,17 @@ export async function compartilharTela(qualidade = preferencias().qualidadeTela 
   return true;
 }
 
-export async function pararTela() {
+export async function pararTela({ trocando = false } = {}) {
   if (!tela) return;
   const t = tela;
   tela = null;
-  const estavaNoAr = Boolean(voz.tela);
-  voz.tela = null;
-  if (estavaNoAr && voz.sala) atualizarPresenca({ tela: false });
-  mudou();
-  avisar('telas');
+  if (!trocando) {
+    const estavaNoAr = Boolean(voz.tela);
+    voz.tela = null;
+    if (estavaNoAr && voz.sala) atualizarPresenca({ tela: false });
+    mudou();
+    avisar('telas');
+  }
   const participante = sala?.localParticipant;
   for (const faixa of [t.video, t.som]) {
     if (!faixa) continue;
