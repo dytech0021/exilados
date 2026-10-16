@@ -1,0 +1,12 @@
+{
+  "name": "exilados-api",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Permissões de voz e de live do Exilados e autorização do MediaMTX. Sem pacotes externos.",
+  "type": "module",
+  "engines": { "node": ">=24" },
+  "scripts": {
+    "start": "node src/servidor.mjs",
+    "test": "node --test"
+  }
+}

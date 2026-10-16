@@ -1,0 +1,38 @@
+# LiveKit do Exilados (voz). Fica em /etc/systemd/system/exilados-livekit.service.
+# A configuração (com a chave) fica em /etc/exilados/livekit.yaml, só do root; o serviço roda com usuário
+# descartável e recebe uma cópia dela por LoadCredential.
+
+[Unit]
+Description=Exilados - servidor de voz (LiveKit)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+LoadCredential=livekit.yaml:/etc/exilados/livekit.yaml
+ExecStart=/opt/livekit/1.13.7/livekit-server --config ${CREDENTIALS_DIRECTORY}/livekit.yaml
+Environment=GOMEMLIMIT=140MiB
+DynamicUser=yes
+Restart=always
+RestartSec=3
+
+MemoryMax=200M
+CPUQuota=80%
+LimitNOFILE=65536
+
+NoNewPrivileges=yes
+ProtectSystem=strict
+ProtectHome=yes
+PrivateTmp=yes
+PrivateDevices=yes
+ProtectKernelTunables=yes
+ProtectKernelModules=yes
+ProtectControlGroups=yes
+RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX AF_NETLINK
+RestrictNamespaces=yes
+LockPersonality=yes
+CapabilityBoundingSet=
+SystemCallArchitectures=native
+
+[Install]
+WantedBy=multi-user.target

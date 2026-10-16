@@ -1,0 +1,36 @@
+# exilados-api: permissões de voz e de live e autorização do MediaMTX. Fica em
+# /etc/systemd/system/exilados-api.service. Escuta só em 127.0.0.1 (7415 pelo nginx, 7416 para o MediaMTX).
+
+[Unit]
+Description=Exilados - permissoes de voz e de live (exilados-api)
+After=network-online.target exilados-livekit.service
+Wants=network-online.target
+
+[Service]
+Type=simple
+ExecStart=/opt/node-v24.19.0-linux-x64/bin/node --max-old-space-size=48 /opt/exilados/api/src/servidor.mjs
+EnvironmentFile=/etc/exilados/api.env
+DynamicUser=yes
+Restart=always
+RestartSec=3
+
+MemoryMax=96M
+CPUQuota=30%
+LimitNOFILE=4096
+
+NoNewPrivileges=yes
+ProtectSystem=strict
+ProtectHome=yes
+PrivateTmp=yes
+PrivateDevices=yes
+ProtectKernelTunables=yes
+ProtectKernelModules=yes
+ProtectControlGroups=yes
+RestrictAddressFamilies=AF_INET AF_INET6
+RestrictNamespaces=yes
+LockPersonality=yes
+CapabilityBoundingSet=
+SystemCallArchitectures=native
+
+[Install]
+WantedBy=multi-user.target

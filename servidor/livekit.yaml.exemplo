@@ -1,0 +1,32 @@
+# LiveKit do Exilados (voz). O instalar.sh gera /etc/exilados/livekit.yaml (0600, root) a partir deste arquivo,
+# trocando <CHAVE>, <SEGREDO> e <IP_PUBLICO>; o serviço recebe uma cópia por LoadCredential.
+#
+# Sinalização só em 127.0.0.1:7880 (o nginx a entrega em wss://filabox3d.com.br/exilados/rtc). O áudio vai direto
+# ao servidor: UDP 7882 e, para redes que bloqueiam UDP, TCP 7881.
+
+port: 7880
+bind_addresses:
+  - 127.0.0.1
+
+rtc:
+  tcp_port: 7881
+  udp_port: 7882
+  use_external_ip: false
+  node_ip: <IP_PUBLICO>
+  enable_loopback_candidate: false
+
+keys:
+  <CHAVE>: <SEGREDO>
+
+room:
+  auto_create: true
+  empty_timeout: 300
+  departure_timeout: 20
+  max_participants: 20
+  enabled_codecs:
+    - mime: audio/opus
+    - mime: audio/red
+
+logging:
+  level: info
+  pion_level: error
