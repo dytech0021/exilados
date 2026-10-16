@@ -1,1 +1,15 @@
+# Desenhos temporários da conversa de planejamento
 .superpowers/
+
+# Dependências e saídas de compilação
+node_modules/
+windows/bin/
+windows/obj/
+pronto/
+
+# Segredos: nunca no repositório (ele é público)
+*.env
+*.chave
+*.key
+*.pem
+livekit.yaml
