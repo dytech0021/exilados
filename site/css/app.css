@@ -558,3 +558,5 @@ button.ao-vivo:hover { background: var(--vermelho-escuro); }
   .duas-colunas { grid-template-columns: 1fr; }
   .cartao { padding: 24px 16px; }
 }
+
+a.botao, a.botao:hover { color: #fff; text-decoration: none; }

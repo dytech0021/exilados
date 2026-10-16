@@ -92,6 +92,7 @@ export function desenharTopoGrupo(topo) {
       const r = e.currentTarget.getBoundingClientRect();
       menu([
         { rotulo: 'Convidar pessoas', icone: 'addAmigo', fn: () => nav.convidar() },
+        { rotulo: 'Transmitir (programa do Windows)', icone: 'tela', fn: () => nav.abrirConfig('transmitir') },
         souDono() ? { rotulo: 'Salas do grupo', icone: 'engrenagem', fn: () => nav.abrirConfig('salas') } : null,
         souDono() ? { rotulo: 'Membros do grupo', icone: 'pessoas', fn: () => nav.abrirConfig('membros') } : null,
       ], r.left + 10, r.bottom + 6);

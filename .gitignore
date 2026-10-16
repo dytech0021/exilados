@@ -15,3 +15,5 @@ pronto/
 livekit.yaml
 .claude/
 ferramentas/demo/*.env
+*.exk
+*.dpapi

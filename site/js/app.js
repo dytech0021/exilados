@@ -302,6 +302,8 @@ function decidir(usuario) {
 
 async function iniciar() {
   if ('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js', { scope: BASE }).catch(() => {});
+  // Um link de convite aberto com o site já aberto nesta aba só troca o "#": recomeça para ler o convite.
+  window.addEventListener('hashchange', () => { if (/convite=/.test(location.hash)) location.reload(); });
   const codigo = lerConviteDaUrl();
   sb.auth.onAuthStateChange((evento, sessao) => {
     if (evento === 'PASSWORD_RECOVERY') setTimeout(telaNovaSenha);

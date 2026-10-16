@@ -80,6 +80,13 @@ systemctl is-active --quiet exilados-livekit || { journalctl -u exilados-livekit
 
 passo "Site"
 install -d /var/www/exilados/www /var/www/exilados/atualizacao
+# O FFmpeg do programa do Windows é o mesmo pacote do Ponte (conferido pelo SHA-256 fixado no programa).
+VIDEO=video-ddf94f763d015cf13e76b515d92040364b4fcbc9f137f5b9238f116b26b8d245.br
+if [ ! -f "/var/www/exilados/atualizacao/$VIDEO" ] && [ -f "/opt/ponte-relay/atualizacao/$VIDEO" ]; then
+  cp "/opt/ponte-relay/atualizacao/$VIDEO" "/var/www/exilados/atualizacao/$VIDEO.tmp"
+  mv "/var/www/exilados/atualizacao/$VIDEO.tmp" "/var/www/exilados/atualizacao/$VIDEO"
+  chmod 644 "/var/www/exilados/atualizacao/$VIDEO"
+fi
 rm -rf /var/www/exilados/www/exilados.novo /var/www/exilados/www/exilados.antigo
 cp -r "$AQUI/site" /var/www/exilados/www/exilados.novo
 rm -rf /var/www/exilados/www/exilados.novo/test /var/www/exilados/www/exilados.novo/package.json
@@ -139,4 +146,5 @@ fi
 rm -f "$NOVO" "$ANTERIOR" /tmp/exilados-nginx.txt
 
 passo "Pronto"
+sleep 1
 curl -fsS https://filabox3d.com.br/exilados/api/saude && echo

@@ -276,11 +276,33 @@ function paginaMembros(secao) {
   return ouvir('membros', desenhar);
 }
 
+// ---------- Transmitir (programa do Windows) ----------
+
+async function paginaTransmitir(secao) {
+  const versao = el('span', { text: '' });
+  limpar(secao,
+    el('h2', { text: 'Transmitir' }),
+    el('p', { class: 'ajuda', text: 'As lives saem do programa Exilados para Windows. Ele transmite uma tela (com o som do computador) ou um programa (só o som dele, no Windows 11), e o grupo assiste aqui, com menos de 1 segundo de atraso. Quem está ao vivo aparece com a etiqueta AO VIVO.' }),
+    el('a', { class: 'botao', href: `${BASE}atualizacao/Exilados.exe`, attrs: { download: 'Exilados.exe' } }, 'Baixar o Exilados para Windows'),
+    el('p', { class: 'ajuda' }, versao),
+    el('h3', { text: 'Como usar' }),
+    el('p', { class: 'ajuda', text: '1. Abra o Exilados.exe (pode deixar na pasta que quiser). 2. Entre com a mesma conta daqui. 3. Escolha a tela ou o programa e clique em Entrar ao vivo. Ele fica perto do relógio, abre junto com o Windows (dá para desligar no menu dele) e se atualiza sozinho.' }),
+    el('h3', { text: 'Requisitos' }),
+    el('p', { class: 'ajuda', text: 'Windows 10 ou 11 de 64 bits, uma placa de vídeo NVIDIA, AMD ou Intel recente e o .NET Desktop Runtime 10 (na primeira vez, o Windows mostra o link para instalar). Na primeira live o programa baixa o componente de vídeo (cerca de 40 MB).' }));
+  try {
+    const resposta = await fetch(`${BASE}atualizacao/manifest.json`, { cache: 'no-store' });
+    if (resposta.ok) versao.textContent = `Versão ${(await resposta.json()).Version}.`;
+  } catch {
+    // Sem a versão, o botão continua valendo.
+  }
+}
+
 // ---------- tela de configurações ----------
 
 const PAGINAS = {
   conta: { rotulo: 'Minha conta', montar: paginaConta },
   voz: { rotulo: 'Voz e áudio', montar: paginaVoz },
+  transmitir: { rotulo: 'Transmitir', montar: paginaTransmitir },
   salas: { rotulo: 'Salas', montar: paginaSalas, dono: true },
   membros: { rotulo: 'Membros', montar: paginaMembros, dono: true },
 };
@@ -309,7 +331,7 @@ export function abrirConfig(pagina) {
   }
   const nav = el('nav', {},
     el('h4', { text: 'Configurações de usuário' }),
-    ['conta', 'voz'].map((p) => el('button', { dataset: { pagina: p }, text: PAGINAS[p].rotulo, onclick: () => mostrarPagina(p) })),
+    ['conta', 'voz', 'transmitir'].map((p) => el('button', { dataset: { pagina: p }, text: PAGINAS[p].rotulo, onclick: () => mostrarPagina(p) })),
     souDono() ? [el('div', { class: 'separador' }), el('h4', { text: 'Grupo Exilados' }),
       ['salas', 'membros'].map((p) => el('button', { dataset: { pagina: p }, text: PAGINAS[p].rotulo, onclick: () => mostrarPagina(p) }))] : null,
     el('div', { class: 'separador' }),
