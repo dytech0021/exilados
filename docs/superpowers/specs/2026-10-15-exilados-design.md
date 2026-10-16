@@ -1,6 +1,6 @@
 # Exilados: especificação
 
-Data: 15/10/2026. Situação: aprovada por partes na conversa de desenho; aguardando a revisão deste texto.
+Data: 15/10/2026. Situação: aprovada (endereço trocado para filabox3d.com.br/exilados na revisão).
 
 ## 1. Objetivo
 
@@ -33,7 +33,7 @@ Dá certo quando:
 | Texto | Mensagens com histórico e imagens. Sem editar, apagar, menções ou reações na primeira versão. |
 | Transmitir | Só pelo programa do Windows (com som isolado do programa). Sem transmitir pelo navegador. |
 | Celular | Só o site instalável. Sem aplicativo nativo por enquanto. |
-| Endereço | `exilados.filabox3d.com.br`. |
+| Endereço | `https://filabox3d.com.br/exilados/`, dentro do site do FilaBox, sem registro novo no DNS. Consequência: o login guardado no navegador é o mesmo do site do FilaBox (entrar ou sair num vale para o outro). |
 | Repositório | `dytech0021/exilados`, público. Nenhuma chave ou senha entra nele. |
 | Aparência | A do Discord (cores escuras, disposição, componentes), com o destaque roxo-azulado (#5865F2) e o ícone "EX" do grupo em laranja (#C0662B). |
 | Ponte | Perde lives e amigos numa versão nova, depois que o Exilados estiver no ar. A live por link aberto (para quem não é do grupo) deixa de existir. |
@@ -72,7 +72,7 @@ o nginx, o MediaMTX e o relay do Ponte.
 ### 4.1 Entrar e fazer parte
 
 - Login pelo Supabase do FilaBox: e-mail e senha, ou Google. Ter conta não dá acesso a nada do grupo.
-- **Convite:** qualquer membro ativo gera um link `https://exilados.filabox3d.com.br/#convite=<código>`. O código
+- **Convite:** qualquer membro ativo gera um link `https://filabox3d.com.br/exilados/#convite=<código>`. O código
   tem 128 bits aleatórios; o banco guarda só o resumo (SHA-256). Vale 7 dias e serve para várias pessoas.
 - **Entrar:** quem abre o link entra (ou cria a conta), escolhe o nome que aparece no grupo (1 a 32 caracteres) e
   vira membro, pela função `exilados_entrar(codigo, nome)`. Ela recusa: código vencido, código de quem foi
@@ -154,7 +154,8 @@ A tela principal segue o desenho aprovado em `docs/desenho/tela-principal.html`:
 - Aparência: as cores escuras do Discord (#1E1F22, #2B2D31, #313338, #383A40), texto #DBDEE1 e #949BA4,
   destaque #5865F2, verde #23A55A, vermelho #F23F43.
 - Aviso rápido no canto quando um membro entra ao vivo ("Dyego entrou ao vivo"), com o botão Assistir.
-- Aplicativo instalável (manifesto e service worker): abre em tela cheia e guarda a casca do site para abrir
+- Aplicativo instalável (manifesto e service worker com escopo `/exilados/`, para não interferir no site do
+  FilaBox): abre em tela cheia e guarda a casca do site para abrir
   rápido. Sem notificações com o site fechado nesta versão.
 - O histórico de uma sala carrega as últimas 50 mensagens e mais 50 ao rolar para cima.
 
@@ -213,7 +214,7 @@ A tela principal segue o desenho aprovado em `docs/desenho/tela-principal.html`:
 
 ### 7.3 Atualização do programa
 
-- Arquivos em `https://exilados.filabox3d.com.br/atualizacao/`: `manifest.json` (versão, tamanho, SHA-256 e
+- Arquivos em `https://filabox3d.com.br/exilados/atualizacao/`: `manifest.json` (versão, tamanho, SHA-256 e
   assinatura ECDSA P-256) e `Exilados.exe`. O programa confere a assinatura com a chave pública embutida, nunca
   volta de versão e troca de executável sem live em andamento (o mesmo esquema do Ponte).
 - A chave privada fica num arquivo fora do repositório, cifrado com uma senha escolhida pelo dono (PBKDF2 com
@@ -228,19 +229,18 @@ A tela principal segue o desenho aprovado em `docs/desenho/tela-principal.html`:
   mestra do Supabase. Guarda a chave do LiveKit e a lista de lives em memória (a fonte para o site é
   `exilados_lives`).
 - **LiveKit:** servidor oficial (licença Apache 2.0), serviço systemd. Conexão de sinalização pelo nginx
-  (`wss://exilados.filabox3d.com.br/rtc`); mídia por UDP 7882, com TCP 7881 de reserva. Sem TURN nesta versão
+  (`wss://filabox3d.com.br/exilados/rtc`); mídia por UDP 7882, com TCP 7881 de reserva. Sem TURN nesta versão
   (o servidor tem IP público; o TCP 7881 cobre redes que bloqueiam UDP).
 - **MediaMTX:** o que já existe. A autorização HTTP passa a apontar para o exilados-api, que repassa ao relay do
-  Ponte o que não é do Exilados. Entrega por WebRTC (WHEP) pelo nginx em `/ao-vivo/`.
-- **nginx:** bloco novo para `exilados.filabox3d.com.br`: o site em `/`, `/api/` para o exilados-api, `/rtc` para
-  o LiveKit, `/ao-vivo/` para o MediaMTX e `/atualizacao/` para os arquivos do programa. Certificado do Let's
-  Encrypt.
+  Ponte o que não é do Exilados. Entrega por WebRTC (WHEP) pelo nginx em `/exilados/ao-vivo/`.
+- **nginx:** dentro do bloco que já serve `filabox3d.com.br`, os caminhos `/exilados/` (site),
+  `/exilados/api/` (exilados-api), `/exilados/rtc` (LiveKit), `/exilados/ao-vivo/` (MediaMTX) e
+  `/exilados/atualizacao/` (arquivos do programa). Vale o certificado que o site já usa; o site do FilaBox e os
+  caminhos `/ponte/` não mudam.
 - **Memória:** o servidor tem cerca de 360 MB livres; os dois serviços novos usam cerca de 150 MB. Na instalação,
   se não houver memória de reserva em disco (swap), é criada uma de 1 GB.
 - **Segredos** (só no servidor, fora do repositório): chave e segredo do LiveKit, e a configuração do exilados-api.
-- **Para o dono fazer:** criar o registro `A` de `exilados` apontando para `177.153.35.193` no painel do
-  Registro.br (o passo a passo vem no plano), e liberar UDP 7882 e TCP 7881 no painel da hospedagem se o firewall
-  de lá bloquear.
+- **Para o dono fazer:** liberar UDP 7882 e TCP 7881 no painel da hospedagem, se o firewall de lá bloquear.
 
 ## 9. Erros
 
@@ -274,7 +274,7 @@ A tela principal segue o desenho aprovado em `docs/desenho/tela-principal.html`:
 Cada etapa tem plano, testes e entrega próprios, e ao fim já dá para usar o que ela traz.
 
 1. **Servidor e contas:** repositório no GitHub, tabelas, regras, funções e a pasta de imagens; exilados-api;
-   LiveKit; nginx, certificado e DNS.
+   LiveKit; caminhos no nginx.
 2. **Site:** login, convite, grupo, salas de texto com imagens, membros e presença, amigos e mensagens diretas,
    configurações do dono, aplicativo instalável.
 3. **Voz:** salas de voz, escolha de microfone e saída, volume de cada pessoa, presença de quem está em cada sala.
