@@ -1,0 +1,51 @@
+// Service worker do Exilados (escopo /exilados/): guarda a casca do site para abrir rápido e funcionar como
+// aplicativo instalado. Sempre tenta a rede primeiro (o site muda sem aviso); a cópia guardada só entra quando a
+// rede falha. API, voz, lives e atualização nunca passam por aqui.
+const VERSAO = 'exilados-casca-1';
+const CASCA = [
+  './',
+  'index.html',
+  'css/app.css',
+  'manifest.webmanifest',
+  'vendor/supabase-2.117.2.js',
+  'js/app.js', 'js/api.js', 'js/amigos.js', 'js/auth.js', 'js/chat.js', 'js/config.js', 'js/config-ui.js',
+  'js/dados.js', 'js/estado.js', 'js/formato.js', 'js/grupo.js', 'js/imagens.js', 'js/live.js', 'js/presenca.js',
+  'js/supa.js', 'js/ui.js', 'js/voz.js',
+  'icones/icone-192.png',
+];
+const FORA = ['/exilados/api/', '/exilados/ao-vivo/', '/exilados/atualizacao/', '/exilados/rtc'];
+
+self.addEventListener('install', (evento) => {
+  evento.waitUntil(caches.open(VERSAO).then((cache) => cache.addAll(CASCA)).then(() => self.skipWaiting()));
+});
+
+self.addEventListener('activate', (evento) => {
+  evento.waitUntil(caches.keys()
+    .then((nomes) => Promise.all(nomes.filter((n) => n.startsWith('exilados-') && n !== VERSAO).map((n) => caches.delete(n))))
+    .then(() => self.clients.claim()));
+});
+
+self.addEventListener('fetch', (evento) => {
+  const pedido = evento.request;
+  const url = new URL(pedido.url);
+  if (pedido.method !== 'GET' || url.origin !== self.location.origin || !url.pathname.startsWith('/exilados/')) return;
+  if (FORA.some((p) => url.pathname.startsWith(p))) return;
+  evento.respondWith((async () => {
+    try {
+      const resposta = await fetch(pedido);
+      if (resposta.ok && resposta.type === 'basic') {
+        const copia = resposta.clone();
+        caches.open(VERSAO).then((cache) => cache.put(pedido, copia)).catch(() => {});
+      }
+      return resposta;
+    } catch (falha) {
+      const guardada = await caches.match(pedido, { ignoreSearch: pedido.mode === 'navigate' });
+      if (guardada) return guardada;
+      if (pedido.mode === 'navigate') {
+        const casca = await caches.match('index.html');
+        if (casca) return casca;
+      }
+      throw falha;
+    }
+  })());
+});

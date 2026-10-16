@@ -1,0 +1,59 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, interactive-widget=resizes-content">
+  <title>Exilados</title>
+  <meta name="description" content="Texto, voz e lives do grupo Exilados.">
+  <meta name="theme-color" content="#1e1f22">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="Exilados">
+  <link rel="manifest" href="manifest.webmanifest">
+  <link rel="icon" href="icones/icone-192.png" sizes="192x192" type="image/png">
+  <link rel="apple-touch-icon" href="icones/icone-180.png">
+  <link rel="stylesheet" href="css/app.css">
+</head>
+<body>
+  <div id="carregando">
+    <div class="logo-ex">EX</div>
+    <span id="carregando-texto">Abrindo o Exilados...</span>
+  </div>
+
+  <!-- Telas de entrada (login, convite, avisos de acesso) são montadas por auth.js aqui. -->
+  <div id="entrada" class="tela-entrada" hidden></div>
+
+  <div id="app" hidden>
+    <div class="esquerda">
+      <nav class="trilho" aria-label="Grupos">
+        <div class="trilho-item" id="trilho-dm">
+          <span class="pilula"></span>
+          <button class="trilho-botao" id="ir-dm" title="Mensagens diretas" aria-label="Mensagens diretas"></button>
+        </div>
+        <div class="trilho-separador"></div>
+        <div class="trilho-item ativo" id="trilho-grupo">
+          <span class="pilula"></span>
+          <button class="trilho-botao grupo" id="ir-grupo" title="Exilados" aria-label="Exilados">EX</button>
+        </div>
+      </nav>
+      <aside class="lateral">
+        <div id="lateral-topo"></div>
+        <div class="lateral-lista" id="lateral-lista"></div>
+        <section class="painel-voz" id="painel-voz" hidden></section>
+        <section class="painel-usuario" id="painel-usuario"></section>
+      </aside>
+    </div>
+    <main class="centro">
+      <header class="centro-topo" id="centro-topo"></header>
+      <div class="centro-corpo" id="centro-corpo"></div>
+    </main>
+    <aside class="membros" id="membros" aria-label="Membros"></aside>
+    <div class="cortina" id="cortina"></div>
+  </div>
+
+  <div id="avisos" aria-live="polite"></div>
+
+  <script src="vendor/supabase-2.117.2.js"></script>
+  <script type="module" src="js/app.js"></script>
+</body>
+</html>

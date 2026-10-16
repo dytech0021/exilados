@@ -13,3 +13,5 @@ pronto/
 *.key
 *.pem
 livekit.yaml
+.claude/
+ferramentas/demo/*.env

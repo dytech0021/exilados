@@ -1,0 +1,318 @@
+// Exilados: início, navegação entre as telas, painéis do celular e avisos.
+import {
+  esquecerConvite, infoConvite, lerConviteDaUrl, telaAviso, telaConvite, telaLogin, telaNovaSenha,
+} from './auth.js';
+import {
+  abrirDM, aceitarAmizade, desenharAmigos, desenharListaDM, desenharTopoDM, iniciarAmigos, pedidosRecebidos, pedirAmizade,
+} from './amigos.js';
+import { BASE } from './config.js';
+import { blocoComeco, conversaAberta, fecharConversa, montarConversa, quandoClicarNoAutor } from './chat.js';
+import { abrirConfig, convidar } from './config-ui.js';
+import { carregarTudo, conectar } from './dados.js';
+import {
+  agoraServidor, avisar, estado, meuId, nomeDe, ouvir,
+} from './estado.js';
+import { cartaoPerfil, desenharSalas, desenharTopoGrupo, iniciarGrupo } from './grupo.js';
+import { fecharLive, montarLive } from './live.js';
+import { liveNoAr } from './presenca.js';
+import { conferir, sb } from './supa.js';
+import {
+  avatar, aviso, botaoIcone, el, icone, limpar,
+} from './ui.js';
+import * as voz from './voz.js';
+
+const $ = (id) => document.getElementById(id);
+const partes = {
+  lista: $('lateral-lista'),
+  topoLateral: $('lateral-topo'),
+  membros: $('membros'),
+  painelVoz: $('painel-voz'),
+  painelUsuario: $('painel-usuario'),
+  topo: $('centro-topo'),
+  centro: $('centro-corpo'),
+};
+const celular = () => window.matchMedia('(max-width: 760px)').matches;
+const CHAVE_SALA = 'exilados-ultima-sala';
+let vistaAnterior = null;
+
+// ---------- painéis (celular) e topo ----------
+
+function painel(qual) {
+  const app = $('app');
+  const classe = `mostrar-${qual}`;
+  const estava = app.classList.contains(classe);
+  app.classList.remove('mostrar-esquerda', 'mostrar-membros');
+  if (!estava) app.classList.add(classe);
+}
+
+function fecharPaineis() {
+  $('app').classList.remove('mostrar-esquerda', 'mostrar-membros');
+}
+
+const botaoMenu = () => botaoIcone('menu', 'Salas e conversas', () => painel('esquerda'), 'botao-menu');
+const botaoMembros = () => botaoIcone('pessoas', 'Membros', () => painel('membros'), 'botao-membros');
+
+function gestos() {
+  let inicio = null;
+  const app = $('app');
+  app.addEventListener('touchstart', (e) => {
+    if (!celular() || e.touches.length !== 1) return;
+    const t = e.touches[0];
+    if (e.target.closest('input[type="range"], .mensagens .imagem, video')) return;
+    inicio = { x: t.clientX, y: t.clientY, quando: Date.now() };
+  }, { passive: true });
+  app.addEventListener('touchend', (e) => {
+    if (!inicio) return;
+    const t = e.changedTouches[0];
+    const dx = t.clientX - inicio.x;
+    const dy = t.clientY - inicio.y;
+    const rapido = Date.now() - inicio.quando < 600;
+    inicio = null;
+    if (!rapido || Math.abs(dx) < 70 || Math.abs(dy) > Math.abs(dx) * 0.6) return;
+    const aberto = app.classList.contains('mostrar-esquerda') ? 'esquerda' : app.classList.contains('mostrar-membros') ? 'membros' : null;
+    if (aberto === 'esquerda' && dx < 0) fecharPaineis();
+    else if (aberto === 'membros' && dx > 0) fecharPaineis();
+    else if (!aberto && dx > 0) painel('esquerda');
+    else if (!aberto && dx < 0) painel('membros');
+  }, { passive: true });
+  $('cortina').addEventListener('click', fecharPaineis);
+}
+
+// ---------- navegação ----------
+
+function atualizarTrilho() {
+  $('trilho-dm').classList.toggle('ativo', estado.modo === 'dm');
+  $('trilho-grupo').classList.toggle('ativo', estado.modo === 'grupo');
+  const dmNaoLidas = [...estado.naoLidas].filter((id) => estado.conversas.has(id)).length + pedidosRecebidos().length;
+  const grupoNaoLido = estado.salas.some((s) => estado.naoLidas.has(s.id));
+  $('trilho-grupo').classList.toggle('nao-lido', grupoNaoLido && estado.modo !== 'grupo');
+  const dm = $('trilho-dm');
+  dm.querySelector('.selo')?.remove();
+  if (dmNaoLidas) dm.append(el('span', { class: 'selo', text: String(dmNaoLidas) }));
+  const total = dmNaoLidas + (grupoNaoLido ? 1 : 0);
+  document.title = total ? `(${total}) Exilados` : 'Exilados';
+}
+
+function desenharLateral() {
+  if (estado.modo === 'grupo') {
+    desenharTopoGrupo(partes.topoLateral);
+    desenharSalas(partes.lista);
+  } else {
+    desenharTopoDM(partes.topoLateral);
+    desenharListaDM(partes.lista);
+  }
+  atualizarTrilho();
+}
+
+function mudarModo(modo) {
+  estado.modo = modo;
+  desenharLateral();
+}
+
+function salaDeTexto(id) {
+  const textos = estado.salas.filter((s) => s.tipo === 'texto');
+  return textos.find((s) => s.id === id) || textos[0] || null;
+}
+
+function desenharCentro() {
+  const v = estado.vista;
+  const topo = partes.topo;
+  if (v.tipo === 'live') {
+    const m = estado.membros.get(v.id) || { user_id: v.id, nome: 'Alguém' };
+    limpar(topo, botaoMenu(),
+      el('div', { class: 'titulo' }, avatar(m, { tamanho: 24 }), el('span', { text: m.nome }), el('span', { class: 'ao-vivo', text: 'Ao vivo' })),
+      botaoMembros(), botaoIcone('fechar', 'Fechar a live', voltar));
+    montarLive(partes.centro, v.id, voltar);
+    return;
+  }
+  if (v.tipo === 'amigos') {
+    desenharAmigos(partes.centro, topo);
+    return;
+  }
+  if (v.tipo === 'conversa') {
+    const c = estado.conversas.get(v.id);
+    const outro = v.outro || (c && (c.a === meuId() ? c.b : c.a));
+    const m = estado.membros.get(outro) || { user_id: outro, nome: 'Alguém' };
+    limpar(topo, botaoMenu(), el('div', { class: 'titulo' }, avatar(m, { tamanho: 24 }), el('span', { text: m.nome })), botaoMembros());
+    montarConversa(partes.centro, {
+      tipo: 'conversa',
+      id: v.id,
+      rotulo: `Conversar com @${m.nome}`,
+      comeco: blocoComeco({ pessoa: m, titulo: m.nome, texto: `Este é o começo do seu histórico de mensagens diretas com ${m.nome}.` }),
+    });
+    return;
+  }
+  const sala = salaDeTexto(v.id);
+  if (!sala) {
+    limpar(topo, botaoMenu(), el('div', { class: 'titulo' }, el('span', { text: 'Exilados' })), botaoMembros());
+    limpar(partes.centro, el('div', { class: 'mensagens' }, blocoComeco({ icone: 'hash', titulo: 'Nenhuma sala de texto', texto: 'O dono do grupo cria as salas em Configurações → Salas.' })));
+    return;
+  }
+  v.id = sala.id;
+  try { localStorage.setItem(CHAVE_SALA, sala.id); } catch { /* sem armazenamento */ }
+  limpar(topo, botaoMenu(), el('div', { class: 'titulo' }, icone('hash'), el('span', { text: sala.nome })), botaoMembros());
+  montarConversa(partes.centro, {
+    tipo: 'sala',
+    id: sala.id,
+    rotulo: `Conversar em #${sala.nome}`,
+    comeco: blocoComeco({ icone: 'hash', titulo: `Boas-vindas a #${sala.nome}!`, texto: `Este é o começo da sala #${sala.nome}.` }),
+  });
+}
+
+function irPara(vista) {
+  if (estado.vista.tipo === 'live' && vista.tipo !== 'live') fecharLive();
+  if (vista.tipo === 'live' && estado.vista.tipo !== 'live') vistaAnterior = { ...estado.vista };
+  fecharConversa();
+  estado.vista = { ...vista };
+  if (vista.tipo === 'grupo') estado.modo = 'grupo';
+  if (vista.tipo === 'amigos' || vista.tipo === 'conversa') estado.modo = 'dm';
+  if (vista.id) estado.naoLidas.delete(vista.id);
+  desenharLateral();
+  desenharCentro();
+  avisar('vista');
+  if (celular()) fecharPaineis();
+}
+
+function voltar() {
+  irPara(vistaAnterior && vistaAnterior.tipo !== 'live' ? vistaAnterior : { tipo: 'grupo', id: null });
+}
+
+const nav = {
+  irPara,
+  abrirConfig,
+  convidar,
+  abrirDM,
+  pedirAmizade,
+  aceitarAmizade,
+  botaoMenu,
+};
+
+// ---------- avisos do que acontece ----------
+
+function acompanhar() {
+  ouvir('mensagem', (m) => {
+    if (m.autor === meuId()) return;
+    const alvo = m.sala_id || m.conversa_id;
+    const aberta = conversaAberta();
+    if (aberta?.id === alvo && !document.hidden) return;
+    estado.naoLidas.add(alvo);
+    avisar('naoLidas');
+    atualizarTrilho();
+    if (m.conversa_id && aberta?.id !== alvo) {
+      const resumo = m.texto ? (m.texto.length > 60 ? `${m.texto.slice(0, 60)}…` : m.texto) : 'mandou uma imagem';
+      aviso(`${nomeDe(m.autor)}: ${resumo}`, { acao: { rotulo: 'Abrir', fn: () => irPara({ tipo: 'conversa', id: m.conversa_id }) } });
+    }
+  });
+  document.addEventListener('visibilitychange', () => {
+    const aberta = conversaAberta();
+    if (!document.hidden && aberta && estado.naoLidas.delete(aberta.id)) {
+      avisar('naoLidas');
+      atualizarTrilho();
+    }
+  });
+  ouvir('amizades', atualizarTrilho);
+  ouvir('liveComecou', (live) => {
+    if (!liveNoAr(live, agoraServidor())) return;
+    aviso(`${nomeDe(live.user_id)} entrou ao vivo`, {
+      tipo: 'vivo',
+      duracao: 12000,
+      acao: { rotulo: 'Assistir', fn: () => irPara({ tipo: 'live', id: live.user_id }) },
+    });
+  });
+  ouvir('salas', () => {
+    if (estado.vista.tipo !== 'grupo') return;
+    const sala = estado.salas.find((s) => s.id === estado.vista.id);
+    if (!sala) irPara({ tipo: 'grupo', id: null });
+    else limpar(partes.topo, botaoMenu(), el('div', { class: 'titulo' }, icone('hash'), el('span', { text: sala.nome })), botaoMembros());
+  });
+  ouvir('removido', async () => {
+    await voz.sair().catch(() => {});
+    fecharLive();
+    telaAviso('Você não faz mais parte do Exilados', 'Sua entrada no grupo foi desfeita pelo dono. Só ele pode te readmitir.', estado.eu);
+  });
+  let faixa = null;
+  ouvir('conexao', (conectado) => {
+    faixa?.remove();
+    faixa = null;
+    if (!conectado) {
+      faixa = el('div', { class: 'sem-conexao', text: 'Sem conexão. Reconectando...' });
+      document.querySelector('.centro').append(faixa);
+    }
+  });
+}
+
+// ---------- início ----------
+
+async function abrirApp() {
+  $('carregando-texto').textContent = 'Carregando o grupo...';
+  await carregarTudo();
+  voz.preferencias();
+  $('entrada').hidden = true;
+  $('carregando').hidden = true;
+  $('app').hidden = false;
+  limpar($('ir-dm'), icone('balao'));
+  $('ir-dm').addEventListener('click', () => {
+    if (estado.modo === 'dm') return;
+    irPara(vistaAnterior?.tipo === 'conversa' ? vistaAnterior : { tipo: 'amigos' });
+  });
+  $('ir-grupo').addEventListener('click', () => irPara({ tipo: 'grupo', id: estado.vista.tipo === 'grupo' ? estado.vista.id : lembrada() }));
+  iniciarGrupo(nav, partes);
+  iniciarAmigos(nav, partes);
+  quandoClicarNoAutor((id, x, y) => cartaoPerfil(id, x, y));
+  acompanhar();
+  gestos();
+  ouvir('vista', () => { if (estado.vista.tipo === 'conversa' || estado.vista.tipo === 'grupo') vistaAnterior = { ...estado.vista }; });
+  irPara({ tipo: 'grupo', id: lembrada() });
+  if (celular()) painel('esquerda');
+  await conectar();
+}
+
+function lembrada() {
+  try { return localStorage.getItem(CHAVE_SALA); } catch { return null; }
+}
+
+let decidindo = null;
+
+/** Logado: entra no grupo, mostra o convite ou explica por que não dá. */
+function decidir(usuario) {
+  if (decidindo) return decidindo;
+  decidindo = (async () => {
+    estado.eu = { id: usuario.id, email: usuario.email };
+    const membro = conferir(await sb.from('exilados_membros').select('user_id,ativo').eq('user_id', usuario.id).maybeSingle());
+    if (membro?.ativo) {
+      esquecerConvite();
+      return abrirApp();
+    }
+    if (membro) return telaAviso('Você não faz mais parte do Exilados', 'Sua entrada no grupo foi desfeita pelo dono. Só ele pode te readmitir.', usuario);
+    const codigo = lerConviteDaUrl();
+    const info = await infoConvite(codigo);
+    if (info?.valido) return telaConvite(info, usuario, async () => { decidindo = null; await decidir(usuario); });
+    if (codigo) {
+      esquecerConvite();
+      return telaAviso('Este convite não vale mais', 'Peça um link novo a quem te convidou. Os convites valem por 7 dias.', usuario);
+    }
+    return telaAviso('Você ainda não faz parte do Exilados', 'Peça um link de convite a alguém do grupo e abra-o aqui.', usuario);
+  })().catch((falha) => {
+    decidindo = null;
+    $('carregando-texto').textContent = `Não deu para abrir: ${falha.message} Tentando de novo...`;
+    setTimeout(() => decidir(usuario), 5000);
+  });
+  return decidindo;
+}
+
+async function iniciar() {
+  if ('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js', { scope: BASE }).catch(() => {});
+  const codigo = lerConviteDaUrl();
+  sb.auth.onAuthStateChange((evento, sessao) => {
+    if (evento === 'PASSWORD_RECOVERY') setTimeout(telaNovaSenha);
+    else if (evento === 'SIGNED_IN' && sessao && !estado.eu) setTimeout(() => decidir(sessao.user));
+    else if (evento === 'SIGNED_OUT' && estado.eu) location.replace(BASE);
+  });
+  const { data: { session: sessao } } = await sb.auth.getSession();
+  if (sessao) return decidir(sessao.user);
+  telaLogin(await infoConvite(codigo));
+}
+
+iniciar().catch((falha) => {
+  $('carregando-texto').textContent = `Não deu para abrir o Exilados: ${falha.message}`;
+});

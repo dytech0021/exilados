@@ -82,7 +82,7 @@ passo "Site"
 install -d /var/www/exilados/www /var/www/exilados/atualizacao
 rm -rf /var/www/exilados/www/exilados.novo /var/www/exilados/www/exilados.antigo
 cp -r "$AQUI/site" /var/www/exilados/www/exilados.novo
-rm -rf /var/www/exilados/www/exilados.novo/test
+rm -rf /var/www/exilados/www/exilados.novo/test /var/www/exilados/www/exilados.novo/package.json
 chown -R root:root /var/www/exilados/www/exilados.novo && chmod -R a+rX,go-w /var/www/exilados/www/exilados.novo
 [ -d /var/www/exilados/www/exilados ] && mv /var/www/exilados/www/exilados /var/www/exilados/www/exilados.antigo
 mv /var/www/exilados/www/exilados.novo /var/www/exilados/www/exilados
