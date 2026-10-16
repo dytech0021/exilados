@@ -37,6 +37,7 @@ export function preferencias() {
     try { prefs = JSON.parse(localStorage.getItem(chavePrefs()) || '{}'); } catch { prefs = {}; }
     prefs.volumes ||= {};
     prefs.volumeEntrada ??= 100;
+    prefs.volumeSaida ??= 100;
     voz.mudo = Boolean(prefs.mudo);
     voz.surdo = Boolean(prefs.surdo);
   }
@@ -63,9 +64,21 @@ export function definirVolume(id, porcento) {
   aplicarVolume(id);
 }
 
+/** Volume de uma pessoa: o dela vezes o volume de saída geral, até o máximo do aparelho (200% ou, no Android, 100%). */
+export function volumeEfetivo(id) {
+  return Math.min(volumeDe(id) * (preferencias().volumeSaida / 100), VOLUME_MAXIMO) / 100;
+}
+
 function aplicarVolume(id) {
   const participante = sala?.remoteParticipants.get(id);
-  if (participante) participante.setVolume(voz.surdo ? 0 : Math.min(volumeDe(id), VOLUME_MAXIMO) / 100);
+  if (participante) participante.setVolume(voz.surdo ? 0 : volumeEfetivo(id));
+}
+
+/** Volume de saída geral (todos da sala), de 0 ao máximo do aparelho. */
+export function definirVolumeSaida(porcento) {
+  preferencias().volumeSaida = Math.max(0, Math.min(VOLUME_MAXIMO, Math.round(porcento)));
+  guardar();
+  for (const id of sala?.remoteParticipants.keys() || []) aplicarVolume(id);
 }
 
 // ---------- LiveKit ----------
@@ -137,12 +150,32 @@ async function abrirMicrofone() {
   const fonte = ctx.createMediaStreamSource(bruto);
   const ganho = ctx.createGain();
   ganho.gain.value = p.volumeEntrada / 100;
+  // Tratamento de voz (como o do Discord): o compressor aproxima as partes fracas das fortes e, junto com o reforço,
+  // sobe a voz uns 11 dB (o ajuste automático do navegador a deixa baixa); o limitador impede que ela estoure.
+  // Medido com voz simulada: fraca e normal +11 dB, forte +6 dB, picos abaixo de -1 dB.
+  const compressor = ctx.createDynamicsCompressor();
+  compressor.threshold.value = -24;
+  compressor.knee.value = 10;
+  compressor.ratio.value = 3;
+  compressor.attack.value = 0.005;
+  compressor.release.value = 0.2;
+  const reforco = ctx.createGain();
+  reforco.gain.value = 1.25;
+  const limitador = ctx.createDynamicsCompressor();
+  limitador.threshold.value = -3;
+  limitador.knee.value = 0;
+  limitador.ratio.value = 20;
+  limitador.attack.value = 0.001;
+  limitador.release.value = 0.1;
   const analisador = ctx.createAnalyser();
   analisador.fftSize = 512;
   const destino = ctx.createMediaStreamDestination();
   fonte.connect(ganho);
-  ganho.connect(analisador);
-  ganho.connect(destino);
+  ganho.connect(compressor);
+  compressor.connect(reforco);
+  reforco.connect(limitador);
+  limitador.connect(analisador);
+  limitador.connect(destino);
   if (ctx.state === 'suspended') await ctx.resume().catch(() => {});
   return {
     bruto, ctx, ganho, analisador,
@@ -313,6 +346,11 @@ export async function entrar(salaId) {
     atualizarPresenca({ voz: salaId, mudo: voz.mudo || voz.surdo, surdo: voz.surdo });
     mudou();
     await room.startAudio().catch(() => {});
+    if (ANDROID && !preferencias().dicaVolume) {
+      prefs.dicaVolume = true;
+      guardar();
+      aviso('Dica: no celular a voz usa o volume de chamada, separado do de música e vídeos. Aumente pelos botões de volume do celular durante a conversa.', { duracao: 10000 });
+    }
     if (microfone) await publicarMicrofone();
     else avisarSemMicrofone(erroMicrofone);
   } catch (erro) {

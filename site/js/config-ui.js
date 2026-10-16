@@ -98,6 +98,15 @@ async function paginaVoz(secao) {
   const saida = el('select', { class: 'entrada', attrs: { 'aria-label': 'Dispositivo de saída' } });
   const volume = el('input', { type: 'range', class: 'faixa-config', min: 0, max: 200, value: p.volumeEntrada, attrs: { 'aria-label': 'Volume de entrada' } });
   const valorVolume = el('span', { text: `${p.volumeEntrada}%` });
+  const volumeSaida = el('input', {
+    type: 'range', class: 'faixa-config', min: 0, max: voz.VOLUME_MAXIMO, value: Math.min(p.volumeSaida, voz.VOLUME_MAXIMO),
+    attrs: { 'aria-label': 'Volume de saída' },
+  });
+  const valorSaida = el('span', { text: `${Math.min(p.volumeSaida, voz.VOLUME_MAXIMO)}%` });
+  volumeSaida.addEventListener('input', () => {
+    valorSaida.textContent = `${volumeSaida.value}%`;
+    voz.definirVolumeSaida(Number(volumeSaida.value));
+  });
   const barra = el('div');
   const medidor = el('div', { class: 'medidor' }, barra);
   const botaoTeste = el('button', { class: 'botao' }, 'Testar microfone');
@@ -163,6 +172,8 @@ async function paginaVoz(secao) {
       el('label', { class: 'campo' }, el('span', { text: 'Dispositivo de saída' }), saida)),
     avisoTexto,
     el('label', { class: 'campo' }, el('span', {}, 'Volume de entrada ', valorVolume), volume),
+    el('label', { class: 'campo' }, el('span', {}, 'Volume de saída (todos da sala) ', valorSaida), volumeSaida),
+    voz.ANDROID ? el('p', { class: 'ajuda', text: 'No celular, a voz usa o volume de chamada, que é separado do volume de música e vídeos: aumente pelos botões de volume do celular durante a conversa.' }) : null,
     el('h3', { text: 'Teste do microfone' }),
     el('p', { class: 'ajuda', text: 'Fale algo: a barra mostra o que o microfone capta (com o volume de entrada acima).' }),
     botaoTeste, medidor,
