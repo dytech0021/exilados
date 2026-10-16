@@ -12,6 +12,7 @@ import { atualizarPresenca, avisarQueFalo } from './dados.js';
 import { avisar, estado, meuId } from './estado.js';
 import { api } from './supa.js';
 import { opcoesPublicacaoTela, qualidadeRecebida } from './qualidade-tela.js';
+import { conectarFiltroRuido } from './filtro-ruido.js';
 import { aviso } from './ui.js';
 
 // tela: { qualidade, som } enquanto compartilha a própria tela; assistindo: de quem é a tela aberta (ou null).
@@ -216,10 +217,7 @@ async function abrirMicrofone() {
   const analisador = ctx.createAnalyser();
   analisador.fftSize = 512;
   const destino = ctx.createMediaStreamDestination();
-  if (filtroRuido) {
-    fonte.connect(filtroRuido);
-    filtroRuido.connect(ganho);
-  } else fonte.connect(ganho);
+  const desligarFiltroRuido = conectarFiltroRuido(fonte, filtroRuido, ganho);
   ganho.connect(compressor);
   compressor.connect(reforco);
   reforco.connect(limitador);
@@ -227,7 +225,7 @@ async function abrirMicrofone() {
   limitador.connect(destino);
   if (ctx.state === 'suspended') await ctx.resume().catch(() => {});
   return {
-    bruto, ctx, ganho, analisador, filtroRuido,
+    bruto, ctx, ganho, analisador, filtroRuido, desligarFiltroRuido,
     faixa: destino.stream.getAudioTracks()[0],
     aparelho: pista?.getSettings?.().deviceId || '',
     nome: nomeDoAparelho({ label: pista?.label, deviceId: pista?.getSettings?.().deviceId }),
@@ -241,6 +239,7 @@ export function rotaAtual() {
 
 function fecharMicrofone(m) {
   if (!m) return;
+  m.desligarFiltroRuido?.();
   m.bruto.getTracks().forEach((t) => t.stop());
   m.faixa?.stop();
   m.filtroRuido?.port.postMessage('parar');

@@ -21,6 +21,7 @@ class CancelamentoRuido extends AudioWorkletProcessor {
     this.escritaSaida = 0;
     this.leituraSaida = 0;
     this.totalSaida = 0;
+    this.iniciado = false;
     this.port.onmessage = (evento) => {
       if (evento.data !== 'parar') return;
       this.wasm._rnnoise_destroy(this.estado);
@@ -53,8 +54,14 @@ class CancelamentoRuido extends AudioWorkletProcessor {
       }
       this.totalSaida += BLOCO;
     }
+    // A primeira janela chega no meio de um quantum de 128 amostras. Esperar o próximo evita
+    // drenar os 480 quadros cedo demais e inserir pequenos silêncios periódicos na voz.
+    if (!this.iniciado && this.totalSaida >= BLOCO) {
+      this.iniciado = true;
+      return true;
+    }
     for (let i = 0; i < saida.length; i++) {
-      if (!this.totalSaida) break; // apenas os primeiros ~10 ms ficam em silêncio
+      if (!this.totalSaida) break; // silêncio apenas durante a inicialização
       saida[i] = this.saidaFifo[this.leituraSaida];
       this.leituraSaida = (this.leituraSaida + 1) % CAPACIDADE;
       this.totalSaida--;

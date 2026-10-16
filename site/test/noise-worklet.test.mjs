@@ -46,3 +46,20 @@ test('o processador RNNoise carrega e atenua ruído contínuo sem interromper o 
   processador.port.onmessage({ data: 'parar' });
   assert.equal(processador.process([[new Float32Array(128)]], [[new Float32Array(128)]]), false);
 });
+
+test('o processamento em blocos não deixa buracos na voz depois de iniciar', () => {
+  let Processador;
+  const codigo = readFileSync(new URL('../vendor/noise-worklet.js', import.meta.url), 'utf8');
+  runInNewContext(codigo, {
+    AudioWorkletProcessor: class { constructor() { this.port = {}; } },
+    registerProcessor: (_, classe) => { Processador = classe; },
+    sampleRate: 48000, WebAssembly, atob, TextDecoder, TextEncoder, console,
+  });
+  const processador = new Processador();
+  processador.wasm._rnnoise_process_frame = () => {}; // isola o transporte de amostras do modelo
+  for (let bloco = 0; bloco < 100; bloco++) {
+    const saida = new Float32Array(128);
+    processador.process([[new Float32Array(128).fill(0.25)]], [[saida]]);
+    if (bloco >= 8) assert.ok(saida.every((amostra) => amostra === 0.25), `Faltou áudio no bloco ${bloco}`);
+  }
+});
