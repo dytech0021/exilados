@@ -2,8 +2,8 @@
 // microfone e de saída com troca na hora, o volume de entrada e compartilhar a tela (como no Discord).
 //
 // O microfone passa por um ganho (Web Audio) antes de ser publicado, para o volume de entrada valer na hora; a
-// redução de ruído, o cancelamento de eco e o ajuste de ganho do navegador ficam sempre ligados. O RNNoise acrescenta
-// supressão de sons externos antes do ganho, quando AudioWorklet/WebAssembly estão disponíveis.
+// redução de ruído e o cancelamento de eco do navegador ficam ligados. O RNNoise acrescenta supressão de sons externos
+// antes do ganho, quando AudioWorklet/WebAssembly estão disponíveis. No Android, o modo forte evita ampliar o ambiente.
 //
 // A voz de todos chega sozinha; a tela de alguém (vídeo e som) só chega para quem abriu a transmissão dela, para não
 // gastar a internet de quem não está assistindo.
@@ -28,15 +28,12 @@ export const QUALIDADES = {
 };
 export const QUALIDADE_PADRAO = '1080p30';
 
-/**
- * No Android, o Chrome trata o microfone e o som da chamada como uma rota só (fone Bluetooth, fone com fio,
- * alto-falante ou celular no ouvido): escolher o microfone escolhe também por onde sai o som. Para isso o som da
- * sala toca pelo canal de chamada (sem a mixagem do Web Audio, que mandaria o som pelo canal de mídia e misturaria
- * fone e celular), e o volume de cada pessoa vai até 100%.
- */
+/** No Android, o Chrome trata microfone e saída da chamada como uma rota só. */
 export const ANDROID = typeof navigator !== 'undefined' && /Android/i.test(navigator.userAgent);
 const CELULAR = typeof navigator !== 'undefined' && /Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
-export const VOLUME_MAXIMO = ANDROID ? 100 : 200;
+const PROGRAMA = typeof window !== 'undefined' && Boolean(window.exiladosPrograma);
+// No EXE e no celular, a voz toca diretamente no <audio>, preservando a saída normal do aparelho.
+export const VOLUME_MAXIMO = ANDROID || PROGRAMA ? 100 : 200;
 estado.falandoNaSala = new Set();
 
 let LK = null;
@@ -58,6 +55,14 @@ export function preferencias() {
     prefs.volumeEntrada ??= 100;
     prefs.volumeSaida ??= 100;
     prefs.cancelamentoRuido ??= true;
+    prefs.ruidoForte ??= ANDROID;
+    if (PROGRAMA && !prefs.saidaEstereo25) {
+      // A seleção antiga podia apontar para a saída mono de chamada do headset. Volta uma vez
+      // à saída padrão do Windows; depois a escolha explícita do usuário continua valendo.
+      prefs.saida = null;
+      prefs.saidaEstereo25 = true;
+      try { localStorage.setItem(chavePrefs(), JSON.stringify(prefs)); } catch { /* sem armazenamento */ }
+    }
     voz.mudo = Boolean(prefs.mudo);
     voz.surdo = Boolean(prefs.surdo);
   }
@@ -84,7 +89,7 @@ export function definirVolume(id, porcento) {
   aplicarVolume(id);
 }
 
-/** Volume de uma pessoa: o dela vezes o volume de saída geral, até o máximo do aparelho (200% ou, no Android, 100%). */
+/** Volume de uma pessoa: o dela vezes o volume de saída geral, até o máximo do aparelho. */
 export function volumeEfetivo(id) {
   return Math.min(volumeDe(id) * (preferencias().volumeSaida / 100), VOLUME_MAXIMO) / 100;
 }
@@ -131,11 +136,12 @@ function carregarLiveKit() {
   });
 }
 
-const restricoes = (deviceId) => ({
+const restricoes = (deviceId, ruidoForte = false) => ({
   deviceId: deviceId && deviceId !== 'default' ? { exact: deviceId } : undefined,
   echoCancellation: true,
   noiseSuppression: true,
-  autoGainControl: true,
+  // No celular, o ganho automático pode amplificar a TV/ambiente entre as falas.
+  autoGainControl: !(ANDROID && ruidoForte),
   channelCount: 1,
 });
 
@@ -153,17 +159,18 @@ export function nomeDoAparelho(aparelho, i = 0) {
 
 const ehFone = (aparelho) => /bluetooth|headset|fone|airpods|buds/i.test(aparelho.label || '') && !/earpiece/i.test(aparelho.label || '');
 
-const capturar = (deviceId) => navigator.mediaDevices.getUserMedia({ audio: restricoes(deviceId) });
+const capturar = (deviceId, ruidoForte) => navigator.mediaDevices.getUserMedia({ audio: restricoes(deviceId, ruidoForte) });
 
 async function abrirMicrofone() {
   const p = preferencias();
+  const ruidoForte = p.cancelamentoRuido && p.ruidoForte;
   let bruto;
   try {
-    bruto = await capturar(p.entrada);
+    bruto = await capturar(p.entrada, ruidoForte);
   } catch (erro) {
     if (erro?.name === 'OverconstrainedError' && p.entrada) {
       // O microfone escolhido sumiu: usa o padrão.
-      bruto = await capturar(null);
+      bruto = await capturar(null, ruidoForte);
     } else {
       throw erro;
     }
@@ -174,7 +181,7 @@ async function abrirMicrofone() {
     const atual = bruto.getAudioTracks()[0]?.getSettings?.().deviceId;
     if (fone && fone.deviceId !== atual) {
       try {
-        const doFone = await capturar(fone.deviceId);
+        const doFone = await capturar(fone.deviceId, ruidoForte);
         bruto.getTracks().forEach((t) => t.stop());
         bruto = doFone;
       } catch {
@@ -190,7 +197,9 @@ async function abrirMicrofone() {
   if (p.cancelamentoRuido && ctx.sampleRate === 48000 && ctx.audioWorklet && typeof AudioWorkletNode !== 'undefined') {
     try {
       await ctx.audioWorklet.addModule(new URL('../vendor/noise-worklet.js', import.meta.url));
-      filtroRuido = new AudioWorkletNode(ctx, 'exilados-cancelamento-ruido');
+      filtroRuido = new AudioWorkletNode(ctx, 'exilados-cancelamento-ruido', {
+        processorOptions: { limiarVoz: ruidoForte ? 0.02 : 0 },
+      });
     } catch (falha) {
       console.warn('Exilados: RNNoise indisponível, usando a redução do navegador:', falha);
     }
@@ -424,8 +433,8 @@ export async function entrar(salaId) {
       adaptiveStream: false,
       dynacast: false,
       disconnectOnPageLeave: true,
-      // Fora do Android, o Web Audio permite volume de até 200% por pessoa e escolher a saída de som.
-      webAudioMix: !ANDROID,
+      // A mixagem extra desvia a voz da saída normal do headset no EXE e do canal de chamada no Android.
+      webAudioMix: !ANDROID && !PROGRAMA,
       // O modo de conexão única (padrão novo da biblioteca) às vezes falha ao negociar no Chrome do Android
       // ("Transceiver not found based on m-line index"); o modo clássico, com uma conexão para enviar e outra para
       // receber, é o testado.
@@ -752,6 +761,22 @@ export async function definirCancelamentoRuido(ligado) {
     await definirEntrada(p.entrada);
   } catch (falha) {
     p.cancelamentoRuido = anterior;
+    guardar();
+    throw falha;
+  }
+}
+
+/** Modo forte: corta sons distantes entre as falas e evita ampliar o ambiente no Android. */
+export async function definirRuidoForte(ligado) {
+  const p = preferencias();
+  const anterior = p.ruidoForte;
+  p.ruidoForte = Boolean(ligado);
+  guardar();
+  if (!microfone?.trilha || !p.cancelamentoRuido) return;
+  try {
+    await definirEntrada(p.entrada);
+  } catch (falha) {
+    p.ruidoForte = anterior;
     guardar();
     throw falha;
   }

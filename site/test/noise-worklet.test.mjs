@@ -63,3 +63,30 @@ test('o processamento em blocos não deixa buracos na voz depois de iniciar', ()
     if (bloco >= 8) assert.ok(saida.every((amostra) => amostra === 0.25), `Faltou áudio no bloco ${bloco}`);
   }
 });
+
+test('o filtro forte corta fala distante e mantém voz próxima sem silenciar a conversa', () => {
+  let Processador;
+  const codigo = readFileSync(new URL('../vendor/noise-worklet.js', import.meta.url), 'utf8');
+  runInNewContext(codigo, {
+    AudioWorkletProcessor: class { constructor() { this.port = {}; } },
+    registerProcessor: (_, classe) => { Processador = classe; },
+    sampleRate: 48000, WebAssembly, atob, TextDecoder, TextEncoder, console,
+  });
+  const processador = new Processador({ processorOptions: { limiarVoz: 0.02 } });
+  processador.wasm._rnnoise_process_frame = () => 0.95; // ambas as fontes parecem voz ao modelo
+  const medir = (amplitude, quanta) => {
+    let energia = 0;
+    for (let i = 0; i < quanta; i++) {
+      const saida = new Float32Array(128);
+      processador.process([[new Float32Array(128).fill(amplitude)]], [[saida]]);
+      if (i >= quanta - 40) for (const amostra of saida) energia += amostra ** 2;
+    }
+    return Math.sqrt(energia / (40 * 128));
+  };
+  const distante = medir(0.004, 130);
+  const perto = medir(0.06, 130);
+  const distanteDepois = medir(0.004, 190);
+  assert.ok(distante < 0.0004, `Som distante continuou: ${distante}`);
+  assert.ok(perto > 0.045, `Voz próxima foi cortada: ${perto}`);
+  assert.ok(distanteDepois < 0.0004, `Som distante voltou: ${distanteDepois}`);
+});

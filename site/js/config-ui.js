@@ -101,6 +101,8 @@ async function paginaVoz(secao) {
   const volume = el('input', { type: 'range', class: 'faixa-config', min: 0, max: 200, value: p.volumeEntrada, attrs: { 'aria-label': 'Volume de entrada' } });
   const valorVolume = el('span', { text: `${p.volumeEntrada}%` });
   const cancelamentoRuido = el('input', { type: 'checkbox', checked: p.cancelamentoRuido, attrs: { 'aria-label': 'Cancelamento de ruído do microfone' } });
+  const ruidoForte = el('input', { type: 'checkbox', checked: p.ruidoForte, attrs: { 'aria-label': 'Filtragem forte do microfone' } });
+  ruidoForte.disabled = !p.cancelamentoRuido;
   const volumeSaida = el('input', {
     type: 'range', class: 'faixa-config', min: 0, max: voz.VOLUME_MAXIMO, value: Math.min(p.volumeSaida, voz.VOLUME_MAXIMO),
     attrs: { 'aria-label': 'Volume de saída' },
@@ -155,7 +157,13 @@ async function paginaVoz(secao) {
     cancelamentoRuido.disabled = true;
     try { await voz.definirCancelamentoRuido(cancelamentoRuido.checked); }
     catch (falha) { cancelamentoRuido.checked = !cancelamentoRuido.checked; erro(falha); }
-    finally { cancelamentoRuido.disabled = false; }
+    finally { cancelamentoRuido.disabled = false; ruidoForte.disabled = !cancelamentoRuido.checked; }
+  });
+  ruidoForte.addEventListener('change', async () => {
+    ruidoForte.disabled = true;
+    try { await voz.definirRuidoForte(ruidoForte.checked); }
+    catch (falha) { ruidoForte.checked = !ruidoForte.checked; erro(falha); }
+    finally { ruidoForte.disabled = !cancelamentoRuido.checked; }
   });
   const mostrarNivel = (nivel) => { barra.style.width = `${Math.round(nivel * 100)}%`; };
   botaoTeste.addEventListener('click', async () => {
@@ -188,7 +196,8 @@ async function paginaVoz(secao) {
     botaoTeste, medidor,
     el('h3', { text: 'Processamento' }),
     el('label', { class: 'opcao-voz' }, cancelamentoRuido, el('span', { text: 'Cancelamento de ruído do microfone' })),
-    el('p', { class: 'ajuda', text: 'Reduz sons externos com RNNoise quando o navegador permite. O cancelamento de eco e a redução de ruído do navegador continuam ativos. O volume de cada pessoa se ajusta com o botão direito no nome dela (ou segurando, no celular).' }));
+    el('label', { class: 'opcao-voz' }, ruidoForte, el('span', { text: 'Filtragem forte para sons distantes' })),
+    el('p', { class: 'ajuda', text: 'A filtragem forte reduz o som de fundo entre as falas. Se sua voz ficar cortada, desligue apenas a filtragem forte. O cancelamento de eco continua ativo. O volume de cada pessoa se ajusta com o botão direito no nome dela (ou segurando, no celular).' }));
   await preencher();
   const pararOuvir = ouvir('dispositivos', preencher);
   return () => {
