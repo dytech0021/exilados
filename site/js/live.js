@@ -3,6 +3,7 @@
 import { AO_VIVO } from './config.js';
 import { estado, meuId, ouvir } from './estado.js';
 import { ALTURA_TITULO, MARGEM, mover, redimensionar } from './flutuante.js';
+import { vigiarVideo } from './estabilidade.js';
 import { api } from './supa.js';
 import { botaoIcone, el, icone, limpar } from './ui.js';
 
@@ -360,16 +361,14 @@ export function montarLive(corpo, usuario, aoFechar, aoAbrir) {
 
   // "N assistindo" a cada 15 s (a mesma chamada renova a permissão para a próxima reconexão).
   a.timerContagem = setInterval(() => { if (!a.encerrada) pedirPermissao(a); }, 15000);
-  // Imagem parada com a conexão de pé: reconecta.
-  let ultimoTempo = -1;
-  let parado = 0;
+  // Só reabre uma sessão se o vídeo ficar parado de fato, sem contar abas suspensas.
+  let vigia = null;
   a.timerVigia = setInterval(() => {
-    if (a.encerrada || !a.pc || a.pc.connectionState !== 'connected' || video.paused) return;
-    if (video.currentTime === ultimoTempo) parado += 1;
-    else parado = 0;
-    ultimoTempo = video.currentTime;
-    if (parado >= 3) {
-      parado = 0;
+    if (a.encerrada) return;
+    const ativo = !document.hidden && a.pc?.connectionState === 'connected' && !video.paused;
+    vigia = vigiarVideo(vigia, { tempo: video.currentTime, agora: performance.now(), ativo });
+    if (vigia.reconectar) {
+      vigia = null;
       retentar(a, 'A imagem parou. Reconectando...', 300);
     }
   }, 2000);

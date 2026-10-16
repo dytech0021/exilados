@@ -63,14 +63,22 @@ fi
 
 passo "exilados-api"
 install -d /opt/exilados
-rm -rf /opt/exilados/api.novo /opt/exilados/api.antigo
-cp -r "$AQUI/api" /opt/exilados/api.novo
-rm -rf /opt/exilados/api.novo/test
-chown -R root:root /opt/exilados/api.novo && chmod -R a+rX,go-w /opt/exilados/api.novo
-[ -d /opt/exilados/api ] && mv /opt/exilados/api /opt/exilados/api.antigo
-mv /opt/exilados/api.novo /opt/exilados/api
+API_ALTERADA=0
+if [ ! -d /opt/exilados/api ] || ! diff -qr "$AQUI/api" /opt/exilados/api >/dev/null; then
+  rm -rf /opt/exilados/api.novo /opt/exilados/api.antigo
+  cp -r "$AQUI/api" /opt/exilados/api.novo
+  rm -rf /opt/exilados/api.novo/test
+  chown -R root:root /opt/exilados/api.novo && chmod -R a+rX,go-w /opt/exilados/api.novo
+  [ -d /opt/exilados/api ] && mv /opt/exilados/api /opt/exilados/api.antigo
+  mv /opt/exilados/api.novo /opt/exilados/api
+  API_ALTERADA=1
+else
+  echo "Já configurada."
+fi
 
 passo "Serviços"
+API_SERVICO_ALTERADO=0
+cmp -s "$AQUI/servidor/exilados-api.service" /etc/systemd/system/exilados-api.service || API_SERVICO_ALTERADO=1
 install -m 0644 "$AQUI/servidor/livekit.service" /etc/systemd/system/exilados-livekit.service
 install -m 0644 "$AQUI/servidor/exilados-api.service" /etc/systemd/system/exilados-api.service
 systemctl daemon-reload
@@ -79,7 +87,9 @@ if [ "$(impressao_livekit)" != "$LIVEKIT_ANTES" ] || ! systemctl is-active --qui
   echo "  configuração do LiveKit mudou: reiniciando (quem está na voz reconecta)"
   systemctl restart exilados-livekit
 fi
-systemctl restart exilados-api
+if [ "$API_ALTERADA" = 1 ] || [ "$API_SERVICO_ALTERADO" = 1 ] || ! systemctl is-active --quiet exilados-api; then
+  systemctl restart exilados-api
+fi
 for _ in $(seq 1 30); do
   curl -fsS -o /dev/null http://127.0.0.1:7415/saude 2>/dev/null && break
   sleep 0.5
@@ -105,22 +115,40 @@ mv /var/www/exilados/www/exilados.novo /var/www/exilados/www/exilados
 rm -rf /var/www/exilados/www/exilados.antigo
 
 passo "nginx"
-install -m 0644 "$AQUI/servidor/nginx-exilados.conf" /etc/nginx/snippets/exilados.conf
+NGINX_ALTERADO=0
+NGINX_SITE_ALTERADO=0
+rm -f /tmp/exilados-nginx-snippet-anterior.conf
+if ! cmp -s "$AQUI/servidor/nginx-exilados.conf" /etc/nginx/snippets/exilados.conf; then
+  [ ! -f /etc/nginx/snippets/exilados.conf ] || cp /etc/nginx/snippets/exilados.conf /tmp/exilados-nginx-snippet-anterior.conf
+  install -m 0644 "$AQUI/servidor/nginx-exilados.conf" /etc/nginx/snippets/exilados.conf
+  NGINX_ALTERADO=1
+fi
 if ! grep -q 'snippets/exilados.conf' "$NGINX_SITE"; then
   cp "$NGINX_SITE" /etc/nginx/filabox.antes-exilados
   # A linha entra antes do primeiro "location / {" (o do bloco de filabox3d.com.br).
   awk '!feito && /^    location \/ \{/ { print "    include /etc/nginx/snippets/exilados.conf;\n"; feito = 1 } { print }' \
     /etc/nginx/filabox.antes-exilados > "$NGINX_SITE"
+  NGINX_ALTERADO=1
+  NGINX_SITE_ALTERADO=1
 fi
-if ! nginx -t 2>/tmp/exilados-nginx.txt; then
-  cat /tmp/exilados-nginx.txt
-  [ -f /etc/nginx/filabox.antes-exilados ] && cp /etc/nginx/filabox.antes-exilados "$NGINX_SITE"
-  rm -f /etc/nginx/snippets/exilados.conf
-  nginx -t && systemctl reload nginx
-  echo "A configuração do nginx não passou; voltei à anterior."
-  exit 1
+if [ "$NGINX_ALTERADO" = 1 ]; then
+  if ! nginx -t 2>/tmp/exilados-nginx.txt; then
+    cat /tmp/exilados-nginx.txt
+    if [ "$NGINX_SITE_ALTERADO" = 1 ]; then cp /etc/nginx/filabox.antes-exilados "$NGINX_SITE"; fi
+    if [ -f /tmp/exilados-nginx-snippet-anterior.conf ]; then
+      cp /tmp/exilados-nginx-snippet-anterior.conf /etc/nginx/snippets/exilados.conf
+    else
+      rm -f /etc/nginx/snippets/exilados.conf
+    fi
+    nginx -t && systemctl reload nginx
+    echo "A configuração do nginx não passou; voltei à anterior."
+    exit 1
+  fi
+  systemctl reload nginx
+else
+  echo "Já configurado; sem recarregar conexões WebSocket."
 fi
-systemctl reload nginx
+rm -f /tmp/exilados-nginx-snippet-anterior.conf
 
 passo "MediaMTX"
 # A configuração vem de servidor/mediamtx/mediamtx.yml. Trocar a autorização ou os caminhos derruba as lives no ar:

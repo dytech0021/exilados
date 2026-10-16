@@ -346,7 +346,7 @@ function montarEventos(LKC, room) {
       avisar('falando');
     })
     .on(E.Reconnecting, () => { voz.situacao = 'reconectando'; mudou(); })
-    .on(E.SignalReconnecting, () => { voz.situacao = 'reconectando'; mudou(); })
+    // A sinalização pode se reconectar enquanto o áudio continua; só marca queda se a mídia cair.
     .on(E.Reconnected, () => { voz.situacao = 'conectada'; mudou(); })
     .on(E.AudioPlaybackStatusChanged, () => {
       if (!room.canPlaybackAudio) {
