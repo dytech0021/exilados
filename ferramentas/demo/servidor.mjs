@@ -1,6 +1,8 @@
 // Servidor do modo de demonstração: serve site/ em http://localhost:5180/exilados/ trocando o Supabase pelo de
 // mentira (supabase-falso.js) e respondendo a API. Com LIVEKIT_CHAVE e LIVEKIT_SEGREDO no ambiente, a sala de voz
 // usa o LiveKit de verdade (wss://filabox3d.com.br/exilados) com a identidade de demonstração.
+// Com ATUALIZACAO=pasta no ambiente, /exilados/atualizacao/ vem dessa pasta (Exilados.exe e manifest.json de teste,
+// usados por ferramentas/teste-atualizacao.ps1).
 // Uso: node ferramentas/demo/servidor.mjs
 import { readFile } from 'node:fs/promises';
 import http from 'node:http';
@@ -19,6 +21,7 @@ if (posicao > 0) {
   }
 }
 const site = path.resolve(aqui, '../../site');
+const atualizacao = process.env.ATUALIZACAO ? path.resolve(process.env.ATUALIZACAO) : null;
 const porta = Number(process.env.PORTA || 5180);
 const TIPOS = {
   '.html': 'text/html; charset=utf-8', '.js': 'text/javascript; charset=utf-8', '.css': 'text/css; charset=utf-8',
@@ -74,13 +77,20 @@ http.createServer(async (pedido, resposta) => {
   let relativo = decodeURIComponent(url.pathname.slice('/exilados/'.length)) || 'index.html';
   if (relativo.endsWith('/')) relativo += 'index.html';
   let arquivo = path.resolve(site, relativo);
+  if (atualizacao && relativo.startsWith('atualizacao/')) {
+    arquivo = path.resolve(atualizacao, relativo.slice('atualizacao/'.length));
+    if (!arquivo.startsWith(atualizacao + path.sep)) {
+      resposta.writeHead(403);
+      return resposta.end();
+    }
+  }
   if (relativo === 'vendor/supabase-2.117.2.js') arquivo = path.join(aqui, 'supabase-falso.js');
   if (relativo === 'sw.js') {
     // Sem service worker na demonstração (para não guardar a versão de mentira).
     resposta.writeHead(404);
     return resposta.end();
   }
-  if (!arquivo.startsWith(site) && !arquivo.startsWith(aqui)) {
+  if (!arquivo.startsWith(site) && !arquivo.startsWith(aqui) && !(atualizacao && arquivo.startsWith(atualizacao + path.sep))) {
     resposta.writeHead(403);
     return resposta.end();
   }

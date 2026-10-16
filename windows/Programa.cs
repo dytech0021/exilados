@@ -66,7 +66,7 @@ internal static class Programa
         {
             Atualizacao.Limpar();
             SynchronizationContext.SetSynchronizationContext(new WindowsFormsSynchronizationContext());
-            Application.Run(new Bandeja(args.Contains(Inicializacao.Argumento), args.Contains("--atualizado"), mostrar));
+            Application.Run(new Bandeja(args.Contains(Inicializacao.Argumento), args.Contains("--atualizado"), args.Contains("--abrir"), mostrar));
             return 0;
         }
         finally { unica.ReleaseMutex(); }
@@ -92,7 +92,7 @@ internal static class Programa
         }
         using var mostrar = new EventWaitHandle(false, EventResetMode.AutoReset);
         Salvar(new JanelaEntrar("pessoa@exemplo.com"), "entrar.png");
-        var bandeja = new Bandeja(true, false, mostrar);
+        var bandeja = new Bandeja(true, false, false, mostrar);
         bandeja.Configuracao.Nome = "Dyego";
         Salvar(new JanelaTransmitir(bandeja), "transmitir.png");
         bandeja.Dispose();
@@ -114,7 +114,7 @@ internal static class Programa
         if (site is not null) JanelaPrincipal.Endereco = site;
         SynchronizationContext.SetSynchronizationContext(new WindowsFormsSynchronizationContext());
         using var mostrar = new EventWaitHandle(false, EventResetMode.AutoReset);
-        using var bandeja = new Bandeja(true, false, mostrar);
+        using var bandeja = new Bandeja(true, false, false, mostrar);
         var janela = bandeja.Principal();
         int resultado = 1;
         janela.Shown += async (_, _) =>

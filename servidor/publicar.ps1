@@ -1,10 +1,14 @@
 ﻿# Publica o Exilados no servidor: empacota api/, servidor/ e site/, envia e roda servidor/instalar.sh como root.
+# O site vai com a versão dele (site/js/versao.js): o número de commits e o commit publicado ("+" no fim quando há
+# mudança em site/ ainda sem commit). Só o pacote muda; no repositório o arquivo continua "dev".
 # Uso: .\servidor\publicar.ps1   (precisa da chave SSH do servidor em ~\.ssh, a mesma do Ponte)
 # Em outro PC, com outra chave: .\servidor\publicar.ps1 -Chave ~\.ssh\filabox_vps -Conhecidos ~\.ssh\known_hosts
+# Só montar o pacote, sem enviar (para conferir): .\servidor\publicar.ps1 -SoPacote
 param(
     [string]$Servidor = '177.153.35.193',
     [string]$Chave = (Join-Path $HOME '.ssh\filabox3d_deploy_ed25519'),
-    [string]$Conhecidos = (Join-Path $HOME '.ssh\filabox3d_known_hosts')
+    [string]$Conhecidos = (Join-Path $HOME '.ssh\filabox3d_known_hosts'),
+    [switch]$SoPacote
 )
 $ErrorActionPreference = 'Stop'
 # Programas externos (ssh, scp, node, tar) escrevem andamento no stderr: confere-se o código de saída de cada um.
@@ -26,10 +30,28 @@ try {
     $saida | Select-String -Pattern '(pass|fail) \d+' | ForEach-Object { $_.Line }
     if ($resultado -ne 0) { $saida; throw 'Os testes do exilados-api falharam; nada foi publicado.' }
 
+    $montagem = Join-Path $env:TEMP 'exilados-publicar'
+    if (Test-Path $montagem) { Remove-Item -Recurse -Force $montagem }
+    New-Item -ItemType Directory $montagem | Out-Null
+    foreach ($parte in 'api', 'servidor', 'site') { Copy-Item $parte $montagem -Recurse }
+    $numero = "$(& git rev-list --count HEAD)".Trim()
+    $commit = "$(& git rev-parse --short HEAD)".Trim()
+    if (-not $numero -or -not $commit) { throw 'Não deu para ler a versão no git.' }
+    if (& git status --porcelain -- site) { $commit += '+' }
+    [IO.File]::WriteAllText((Join-Path $montagem 'site\js\versao.js'),
+        "// Gerado por servidor/publicar.ps1.`nexport const VERSAO_SITE = '$numero';`nexport const COMMIT_SITE = '$commit';`n",
+        [Text.UTF8Encoding]::new($false))
+    Write-Host "Site versão $numero ($commit)"
+
     $pacote = Join-Path $env:TEMP 'exilados-publicar.tar.gz'
     if (Test-Path $pacote) { Remove-Item $pacote -Force }
-    & tar -czf $pacote --exclude=test --exclude=node_modules --exclude=*.test.mjs api servidor site
+    & tar -czf $pacote -C $montagem --exclude=test --exclude=node_modules --exclude=*.test.mjs api servidor site
     if ($LASTEXITCODE -ne 0) { throw 'Não deu para empacotar.' }
+    Remove-Item -Recurse -Force $montagem
+    if ($SoPacote) {
+        Write-Host "Pacote em $pacote (nada foi enviado)."
+        return
+    }
 
     & scp @opcoes $pacote "root@${Servidor}:/tmp/exilados-publicar.tar.gz"
     if ($LASTEXITCODE -ne 0) { throw 'Não deu para enviar ao servidor.' }

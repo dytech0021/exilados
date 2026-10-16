@@ -79,9 +79,10 @@ internal static class Atualizacao
 
     /// <summary>
     /// Confere de novo, faz o teste de partida (uma versão que nem abre não substitui a que funciona), troca o
-    /// executável (o atual vira ".antigo") e abre a versão nova. Quem chama deve encerrar em seguida.
+    /// executável (o atual vira ".antigo") e abre a versão nova, com a janela principal à vista se
+    /// <paramref name="abrirJanela"/>. Quem chama deve encerrar em seguida.
     /// </summary>
-    public static void Aplicar(string novo, Manifesto m)
+    public static void Aplicar(string novo, Manifesto m, bool abrirJanela)
     {
         if (!PodeSeAtualizar) throw new ExiladosException("Esta cópia do Exilados não se atualiza sozinha.");
         if (!Bate(File.ReadAllBytes(novo), m)) throw new ExiladosException("O arquivo de atualização foi alterado depois de baixado e foi descartado.");
@@ -110,7 +111,9 @@ internal static class Atualizacao
         {
             throw new ExiladosException("Não foi possível trocar o arquivo do programa. Ele está numa pasta protegida ou em uso.");
         }
-        Process.Start(new ProcessStartInfo(exe) { UseShellExecute = false, ArgumentList = { "--atualizado" } })?.Dispose();
+        var inicio = new ProcessStartInfo(exe) { UseShellExecute = false, ArgumentList = { "--atualizado" } };
+        if (abrirJanela) inicio.ArgumentList.Add("--abrir");
+        Process.Start(inicio)?.Dispose();
     }
 
     /// <summary>Remove o que sobrou da última troca. Chamado na partida.</summary>

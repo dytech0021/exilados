@@ -485,6 +485,7 @@ button.ao-vivo:hover { background: var(--vermelho-escuro); }
 .configuracoes .nav button.ativo { background: var(--item-ativo); color: #fff; }
 .configuracoes .nav button.perigo { color: #fa777c; }
 .configuracoes .nav .separador { height: 1px; margin: 8px 10px; background: var(--separador); }
+.configuracoes .nav .versoes { display: flex; flex-direction: column; gap: 2px; padding: 4px 10px; color: var(--texto-fraco); font-size: 12px; }
 .configuracoes .pagina { flex: 1 1 800px; overflow-y: auto; display: flex; }
 .configuracoes .pagina > section { width: 100%; max-width: 740px; padding: 60px 40px 80px; }
 .configuracoes .pagina h2 { margin: 0 0 20px; color: var(--texto-forte); font-size: 20px; font-weight: 600; }

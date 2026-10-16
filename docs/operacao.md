@@ -72,8 +72,9 @@ on conflict (user_id) do update set papel = 'dono', ativo = true;
 | Voz pela internet | `lk load-test --url wss://filabox3d.com.br/exilados --room teste --audio-publishers 1 --subscribers 2` (com a chave do `api.env`) |
 | Programa do Windows | `Exilados.exe --autoteste pasta` (com uma conta guardada no programa, testa também a live pelo servidor) |
 | Janelas do programa | `Exilados.exe --captura-ui pasta` |
+| Atualização automática | `.\ferramentas\teste-atualizacao\teste.ps1`: duas versões de teste com chave descartável e o site de demonstração; confere abrir com versão nova, a setinha verde e o clique nela, e fechar e abrir de novo (não toca na cópia instalada nem no servidor) |
 | Site sem contas | `node ferramentas/demo/servidor.mjs` e abrir http://localhost:5180/exilados/ (Supabase de mentira; `--livekit arquivo` liga a voz de verdade; outra aba com `?como=lucas` entra como outra pessoa, para testar a tela compartilhada) |
-| Testes | `cd api && node --test` (29) e `cd site && node --test` (17) |
+| Testes | `cd api && node --test` (29) e `cd site && node --test` (22) |
 
 Registros do programa: `%APPDATA%\Exilados\sessoes.txt` (início, fim e quedas das lives) e `erros.txt`.
 

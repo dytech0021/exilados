@@ -4,7 +4,8 @@ import { BASE, PASTA_IMAGENS } from './config.js';
 import { avisar, estado, eu, meuId, ouvir, souDono } from './estado.js';
 import { formatarId, lerId, limparNome, ordenarPorNome } from './formato.js';
 import { conferirArquivo, LADO_PERFIL, reduzirImagem } from './imagens.js';
-import { abrirTransmitir, noPrograma } from './programa.js';
+import { abrirTransmitir, noPrograma, versaoDoPrograma } from './programa.js';
+import { COMMIT_SITE, VERSAO_SITE } from './versao.js';
 import { api, conferir, sb } from './supa.js';
 import { sair } from './auth.js';
 import {
@@ -313,9 +314,11 @@ async function paginaTransmitir(secao) {
       el('h2', { text: 'Transmitir' }),
       el('p', { class: 'ajuda', text: 'As lives saem deste programa: ele transmite uma tela (com o som do computador) ou um programa (só o som dele, no Windows 11), e o grupo assiste aqui, com menos de 1 segundo de atraso. Quem está ao vivo aparece com a etiqueta AO VIVO.' }),
       el('button', { class: 'botao', text: 'Abrir a janela de transmitir', onclick: abrirTransmitir }),
-      el('p', { class: 'ajuda', text: `Versão do programa: ${window.exiladosPrograma.versao}.` }),
+      el('p', { class: 'ajuda', text: `Versão do programa: ${versaoDoPrograma}.` }),
       el('h3', { text: 'Como usar' }),
-      el('p', { class: 'ajuda', text: 'Escolha a tela ou o programa e a qualidade, e clique em Entrar ao vivo. Fechar esta janela não fecha o programa: ele fica perto do relógio (a voz continua) e se atualiza sozinho quando você não está numa sala de voz.' }));
+      el('p', { class: 'ajuda', text: 'Escolha a tela ou o programa e a qualidade, e clique em Entrar ao vivo. Fechar esta janela não fecha o programa: ele fica perto do relógio (a voz continua).' }),
+      el('h3', { text: 'Atualizações' }),
+      el('p', { class: 'ajuda', text: 'Quando sai uma versão nova, o programa baixa sozinho e aparece uma setinha verde no canto esquerdo: clique nela para reiniciar na versão nova. Se você não clicar, ela entra sozinha quando você fechar e abrir o programa de novo (nunca no meio de uma live ou de uma conversa de voz).' }));
     return;
   }
   const versao = el('span', { text: '' });
@@ -375,7 +378,12 @@ export function abrirConfig(pagina) {
       ['salas', 'membros'].map((p) => el('button', { dataset: { pagina: p }, text: PAGINAS[p].rotulo, onclick: () => mostrarPagina(p) }))] : null,
     el('div', { class: 'separador' }),
     el('button', { text: 'Convidar pessoas', onclick: convidar }),
-    el('button', { class: 'perigo', text: 'Sair da conta', onclick: sairDaConta }));
+    el('button', { class: 'perigo', text: 'Sair da conta', onclick: sairDaConta }),
+    el('div', { class: 'separador' }),
+    // Como o Discord, as versões ficam no fim da lista (ajudam a saber se a atualização já chegou).
+    el('div', { class: 'versoes' },
+      el('small', { text: `Site ${VERSAO_SITE}${COMMIT_SITE ? ` (${COMMIT_SITE})` : ''}` }),
+      noPrograma ? el('small', { text: `Programa ${versaoDoPrograma} para Windows` }) : null));
   const paginaEl = el('div', { class: 'pagina' });
   const fechar = () => {
     aberta?.desfazer?.();

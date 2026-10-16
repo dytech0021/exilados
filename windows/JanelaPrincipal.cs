@@ -12,7 +12,8 @@ internal sealed record SessaoDoSite(string Token, string Usuario, string Email, 
 /// Janela principal: o site do Exilados inteiro dentro do programa (WebView2), como o aplicativo do Discord. Fechar só
 /// esconde a janela (a voz continua e o programa segue perto do relógio). Links de fora abrem no navegador, e o login
 /// com Google também passa por ele (o Google não aceita login dentro de programas) e volta para cá. O site pede a
-/// janela Transmitir, empresta o login dele às lives e diz se a pessoa está numa sala de voz.
+/// janela Transmitir, empresta o login dele às lives e diz se a pessoa está numa sala de voz; o programa conta a ele
+/// quando há versão nova pronta (a setinha verde), e o clique nela volta para cá.
 /// </summary>
 internal sealed class JanelaPrincipal : Form
 {
@@ -275,14 +276,26 @@ internal sealed class JanelaPrincipal : Form
         {
             case "pronto":
                 _pronta.TrySetResult();
+                AvisarAtualizacao();
                 break;
             case "transmitir":
                 _bandeja.MostrarTransmitir();
+                break;
+            case "atualizar":
+                _ = _bandeja.AtualizarAgoraAsync();
                 break;
             case "resposta" when mensagem.TryGetProperty("id", out var id) && id.TryGetInt32(out int numero) && _pedidos.Remove(numero, out var pedido):
                 pedido.TrySetResult(mensagem);
                 break;
         }
+    }
+
+    /// <summary>Conta ao site se há versão nova pronta (a setinha verde). Também a cada vez que o site carrega.</summary>
+    public void AvisarAtualizacao()
+    {
+        if (IsDisposed || !_pronta.Task.IsCompleted || _web.CoreWebView2 is not { } web) return;
+        try { web.PostWebMessageAsJson(JsonSerializer.Serialize(new { tipo = "atualizacao", versao = _bandeja.AtualizacaoPronta })); }
+        catch (Exception ex) when (ex is InvalidOperationException or ObjectDisposedException or COMException) { }
     }
 
     /// <summary>Pergunta algo ao site (de qualquer thread). null: o site não respondeu a tempo ou não está aberto.</summary>

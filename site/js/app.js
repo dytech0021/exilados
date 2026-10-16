@@ -15,11 +15,13 @@ import {
 import { cartaoPerfil, desenharSalas, desenharTopoGrupo, iniciarGrupo } from './grupo.js';
 import { fecharLive, montarLive } from './live.js';
 import { liveNoAr } from './presenca.js';
-import { iniciarPrograma, noPrograma } from './programa.js';
+import {
+  atualizarPrograma, iniciarPrograma, noPrograma, quandoAtualizacao,
+} from './programa.js';
 import { conferir, sb } from './supa.js';
 import { fecharTela, montarTela } from './tela.js';
 import {
-  avatar, aviso, botaoIcone, el, icone, limpar,
+  avatar, aviso, botaoIcone, confirmar, el, icone, limpar,
 } from './ui.js';
 import * as voz from './voz.js';
 
@@ -293,10 +295,17 @@ async function abrirApp() {
   await conectar();
 }
 
-/** Botão de baixar o programa no trilho (como o "Baixar aplicativos" do Discord): só no Windows e fora do próprio programa. */
+/** Numa sala de voz ou assistindo a algo: o programa não reinicia sem perguntar. */
+const ocupado = () => voz.voz.situacao !== 'desligada' || assistindo(estado.vista?.tipo);
+
+/**
+ * Botão de baixar o programa no trilho (como o "Baixar aplicativos" do Discord): só no Windows e fora do próprio
+ * programa. Dentro do programa, o mesmo lugar mostra a setinha verde de atualização pronta (como a do Discord).
+ */
 function botaoBaixar() {
+  if (noPrograma) return setinhaAtualizacao();
   const windows = navigator.userAgentData?.platform === 'Windows' || /Windows NT/.test(navigator.userAgent);
-  if (!windows || noPrograma) return;
+  if (!windows) return;
   $('trilho-baixar').hidden = false;
   $('trilho-baixar-separador').hidden = false;
   const botao = $('baixar-programa');
@@ -306,6 +315,32 @@ function botaoBaixar() {
     acao: { rotulo: 'Como usar', fn: () => abrirConfig('transmitir') },
     duracao: 10000,
   }));
+}
+
+function setinhaAtualizacao() {
+  const botao = el('button', { class: 'trilho-botao baixar', id: 'atualizar-programa' }, icone('baixar'));
+  $('baixar-programa').replaceWith(botao);
+  let versao = null;
+  botao.addEventListener('click', async () => {
+    if (!versao) return;
+    if (ocupado()) {
+      const ok = await confirmar({
+        titulo: 'Atualizar o Exilados',
+        texto: `O programa reinicia na versão ${versao} em alguns segundos, e você sai da sala de voz (é só entrar de novo depois).`,
+        botao: 'Reiniciar agora',
+      });
+      if (!ok) return;
+    }
+    atualizarPrograma();
+  });
+  quandoAtualizacao((nova) => {
+    versao = nova;
+    const rotulo = nova ? `Atualização pronta (versão ${nova}): clique para reiniciar` : '';
+    botao.title = rotulo;
+    botao.setAttribute('aria-label', rotulo);
+    $('trilho-baixar').hidden = !nova;
+    $('trilho-baixar-separador').hidden = !nova;
+  });
 }
 
 function lembrada() {
@@ -352,7 +387,7 @@ async function iniciar() {
       const { data: { session: s } } = await sb.auth.getSession();
       return s ? { token: s.access_token, usuario: s.user.id, email: s.user.email || '', nome: estado.membros.get(s.user.id)?.nome || '' } : null;
     },
-    ocupado: () => voz.voz.situacao !== 'desligada' || assistindo(estado.vista?.tipo),
+    ocupado,
   });
   sb.auth.onAuthStateChange((evento, sessao) => {
     if (evento === 'PASSWORD_RECOVERY') setTimeout(telaNovaSenha);

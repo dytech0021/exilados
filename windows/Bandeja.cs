@@ -2,15 +2,17 @@ namespace Exilados;
 
 /// <summary>
 /// O programa fica perto do relógio. Menu: Abrir o Exilados (a janela principal, com o site), Transmitir..., Parar
-/// transmissão, Abrir com o Windows, Sair da conta e Sair. Procura atualização ao abrir e a cada 6 horas, e só troca
-/// sem live no ar e sem a pessoa usando a janela principal (nem numa sala de voz com ela escondida).
+/// transmissão, Abrir com o Windows, Sair da conta e Sair.
+/// Atualização como a do Discord: ao abrir, procura uma versão nova e instala antes de mostrar a janela; aberto, procura
+/// a cada hora e baixa sozinho, e a setinha verde aparece no site (clicar nela reinicia na versão nova). Sem clique, a
+/// versão nova entra quando a janela é fechada ou aberta de novo, nunca no meio de uma live ou de uma conversa de voz.
 /// </summary>
 internal sealed class Bandeja : ApplicationContext
 {
     private readonly SynchronizationContext _ui;
     private readonly NotifyIcon _icone;
-    private readonly ToolStripMenuItem _quem, _transmitir, _parar, _comWindows, _sairConta;
-    private readonly System.Windows.Forms.Timer _relogio = new() { Interval = 6 * 60 * 60 * 1000 };
+    private readonly ToolStripMenuItem _quem, _atualizar, _transmitir, _parar, _comWindows, _sairConta;
+    private readonly System.Windows.Forms.Timer _relogio = new() { Interval = 60 * 60 * 1000 };
     private readonly System.Windows.Forms.Timer _tentarAtualizar = new() { Interval = 10 * 60 * 1000 };
     private readonly bool _comJanela = JanelaPrincipal.Disponivel;
     private JanelaPrincipal? _principal;
@@ -19,6 +21,11 @@ internal sealed class Bandeja : ApplicationContext
     private Conta? _conta;
     private AcessoDoSite? _site;
     private Manifesto? _pendente;
+    private string? _baixado;
+    private bool _trocando;
+
+    /// <summary>Versão nova já baixada e conferida, pronta para instalar (a setinha verde), ou null.</summary>
+    public string? AtualizacaoPronta => _baixado is not null ? _pendente?.Version : null;
 
     public Config Configuracao { get; }
     public Transmissao? Live { get; private set; }
@@ -31,7 +38,10 @@ internal sealed class Bandeja : ApplicationContext
     /// <summary>Mudou algo que as janelas mostram. Sempre na thread da interface.</summary>
     public event Action? Mudou;
 
-    public Bandeja(bool inicio, bool atualizado, EventWaitHandle mostrar)
+    /// <param name="inicio">Aberto com o Windows: fica só perto do relógio.</param>
+    /// <param name="atualizado">Aberto pela versão anterior, que acabou de se trocar por esta.</param>
+    /// <param name="abrir">Com <paramref name="atualizado"/>: a pessoa estava com a janela aberta, que volta à vista.</param>
+    public Bandeja(bool inicio, bool atualizado, bool abrir, EventWaitHandle mostrar)
     {
         _ui = SynchronizationContext.Current ?? new WindowsFormsSynchronizationContext();
         Configuracao = Config.Carregar();
@@ -40,6 +50,12 @@ internal sealed class Bandeja : ApplicationContext
         Inicializacao.Aplicar(Configuracao.AbrirComWindows);
 
         _quem = new ToolStripMenuItem { Enabled = false };
+        _atualizar = new ToolStripMenuItem("Reiniciar para atualizar", null, async (_, _) => await AtualizarAgoraAsync())
+        {
+            Visible = false,
+            ForeColor = Visual.Verde,
+            Font = new Font(SystemFonts.MenuFont ?? Control.DefaultFont, FontStyle.Bold),
+        };
         _transmitir = new ToolStripMenuItem("Transmitir...", null, (_, _) => MostrarTransmitir());
         _parar = new ToolStripMenuItem("Parar transmissão", null, async (_, _) => await PararAsync());
         _comWindows = new ToolStripMenuItem("Abrir com o Windows", null, (_, _) => AlternarInicializacao()) { Checked = Configuracao.AbrirComWindows };
@@ -47,6 +63,7 @@ internal sealed class Bandeja : ApplicationContext
         var menu = new ContextMenuStrip();
         menu.Items.AddRange([
             _quem,
+            _atualizar,
             new ToolStripSeparator(),
             new ToolStripMenuItem("Abrir o Exilados", null, (_, _) => AbrirExilados()),
             _transmitir,
@@ -70,11 +87,19 @@ internal sealed class Bandeja : ApplicationContext
             _tentarAtualizar.Stop();
             await AplicarPendenteAsync();
         };
-        _ = Task.Delay(TimeSpan.FromSeconds(atualizado ? 5 : 60)).ContinueWith(_ => _ui.Post(async _ => await ProcurarAtualizacaoAsync(), null), TaskScheduler.Default);
 
-        if (atualizado) _icone.ShowBalloonTip(5000, "Exilados", $"Atualizado para a versão {Atualizacao.Atual}.", ToolTipIcon.Info);
-        if (!inicio && !atualizado) _ui.Post(_ => MostrarPrincipal(), null);
-        else if (_conta is null && !_comJanela) _icone.ShowBalloonTip(8000, "Exilados", "Entre na sua conta para transmitir para o grupo (duplo clique aqui).", ToolTipIcon.Info);
+        if (atualizado)
+        {
+            if (abrir) _ui.Post(_ => MostrarPrincipal(), null);
+            else _icone.ShowBalloonTip(5000, "Exilados", $"Atualizado para a versão {Atualizacao.Atual}.", ToolTipIcon.Info);
+        }
+        else if (inicio)
+        {
+            // Com o Windows: a internet pode demorar a voltar; procura daqui a 1 minuto.
+            _ = Task.Delay(TimeSpan.FromSeconds(60)).ContinueWith(_ => _ui.Post(async _ => await ProcurarAtualizacaoAsync(), null), TaskScheduler.Default);
+            if (_conta is null && !_comJanela) _icone.ShowBalloonTip(8000, "Exilados", "Entre na sua conta para transmitir para o grupo (duplo clique aqui).", ToolTipIcon.Info);
+        }
+        else _ui.Post(async _ => await AbrirComAtualizacaoAsync(), null);
     }
 
     private void Guardar(Conta conta) => _ui.Post(_ =>
@@ -92,12 +117,16 @@ internal sealed class Bandeja : ApplicationContext
     private void AtualizarMenu()
     {
         string quem = _conta is not null ? (Configuracao.Nome.Length > 0 ? Configuracao.Nome : Configuracao.Email) : _site?.Nome ?? "";
-        _quem.Text = quem.Length > 0 ? $"Exilados — {quem}" : _comJanela ? "Exilados" : "Sem conta neste computador";
+        string versao = $"Exilados {Atualizacao.Atual}";
+        _quem.Text = quem.Length > 0 ? $"{versao} — {quem}" : _comJanela ? versao : $"{versao} — sem conta neste computador";
+        _atualizar.Visible = AtualizacaoPronta is not null;
+        _atualizar.Text = $"Reiniciar para atualizar (versão {AtualizacaoPronta})";
         _transmitir.Enabled = !Comecando;
         _parar.Enabled = Live is not null;
         _sairConta.Enabled = _conta is not null && Live is null;
         string texto = Live is { AoVivo: true } l ? $"Exilados — ao vivo{(l.Assistindo >= 0 ? $" · {l.Assistindo} assistindo" : "")}"
-            : Live is not null ? "Exilados — reconectando a live" : "Exilados";
+            : Live is not null ? "Exilados — reconectando a live"
+            : AtualizacaoPronta is not null ? "Exilados — atualização pronta" : "Exilados";
         _icone.Text = texto.Length > 63 ? texto[..63] : texto;
     }
 
@@ -106,14 +135,30 @@ internal sealed class Bandeja : ApplicationContext
     /// <summary>A janela principal (o site); sem o WebView2 no Windows, a janela Transmitir, como antes.</summary>
     public void MostrarPrincipal()
     {
-        if (_comJanela) Principal().Mostrar();
+        if (_comJanela) _ = ReabrirAsync();
         else MostrarTransmitir();
     }
 
     public void AbrirExilados()
     {
-        if (_comJanela) Principal().Mostrar();
+        if (_comJanela) _ = ReabrirAsync();
         else Conta.AbrirNavegador(Conta.Site);
+    }
+
+    /// <summary>
+    /// Mostra a janela principal. Fechada, com a versão nova já baixada e a pessoa fora da voz e sem live: instala antes
+    /// e abre já a versão nova (como o Discord ao abrir).
+    /// </summary>
+    private async Task ReabrirAsync()
+    {
+        if (_trocando) return;
+        if (AtualizacaoPronta is not null && Live is null && !Comecando && _principal is not { Visible: true } &&
+            !(_principal is { IsDisposed: false } escondida && await escondida.OcupadaAsync()))
+        {
+            await InstalarAsync(abrirJanela: true);
+            if (_trocando) return;
+        }
+        Principal().Mostrar();
     }
 
     public JanelaPrincipal Principal()
@@ -248,7 +293,7 @@ internal sealed class Bandeja : ApplicationContext
         await AplicarPendenteAsync();
     }
 
-    public async Task PararAsync()
+    public async Task PararAsync(bool aplicarDepois = true)
     {
         var live = Live;
         if (live is null) return;
@@ -256,7 +301,7 @@ internal sealed class Bandeja : ApplicationContext
         Avisar();
         await live.DisposeAsync();
         Avisar();
-        await AplicarPendenteAsync();
+        if (aplicarDepois) await AplicarPendenteAsync();
     }
 
     // ---------- conta, inicialização, sair ----------
@@ -283,7 +328,12 @@ internal sealed class Bandeja : ApplicationContext
 
     private async Task SairAsync()
     {
-        await PararAsync();
+        await PararAsync(aplicarDepois: false);
+        Encerrar();
+    }
+
+    private void Encerrar()
+    {
         _principal?.Fechar();
         _icone.Visible = false;
         _icone.Dispose();
@@ -305,9 +355,50 @@ internal sealed class Bandeja : ApplicationContext
 
     // ---------- atualização ----------
 
+    /// <summary>Ao abrir o programa: procura uma versão nova (no máximo 5 s) e, se houver, instala antes de mostrar a janela.</summary>
+    private async Task AbrirComAtualizacaoAsync()
+    {
+        if (Atualizacao.PodeSeAtualizar)
+        {
+            var aviso = new JanelaAtualizando("Procurando atualização...");
+            aviso.Show();
+            try
+            {
+                Manifesto? manifesto;
+                using (var prazo = new CancellationTokenSource(TimeSpan.FromSeconds(5)))
+                    manifesto = await Atualizacao.ProcurarAsync(prazo.Token);
+                if (manifesto is not null)
+                {
+                    Registro.Sessao($"atualização: versão {manifesto.Version} disponível ao abrir");
+                    aviso.Mostrar($"Baixando a versão {manifesto.Version}...");
+                    using var prazo = new CancellationTokenSource(TimeSpan.FromMinutes(2));
+                    _baixado = await Atualizacao.BaixarAsync(manifesto, prazo.Token);
+                    _pendente = manifesto;
+                    aviso.Mostrar("Atualizando...");
+                    await InstalarAsync(abrirJanela: true, aviso);
+                }
+            }
+            catch (Exception ex) when (ex is ExiladosException or OperationCanceledException or IOException or HttpRequestException or UnauthorizedAccessException)
+            {
+                _pendente = null;
+                _baixado = null;
+                Registro.Sessao($"atualização ao abrir: {ex.Message}");
+            }
+            finally
+            {
+                // Trocando, o aviso fica até esta versão fechar (a nova abre a janela em seguida).
+                if (!_trocando) aviso.Close();
+            }
+            if (_trocando) return;
+        }
+        if (_comJanela) Principal().Mostrar();
+        else MostrarTransmitir();
+    }
+
+    /// <summary>Com o programa aberto (a cada hora): baixa a versão nova e mostra a setinha; com a janela fechada, já instala.</summary>
     private async Task ProcurarAtualizacaoAsync()
     {
-        if (!Atualizacao.PodeSeAtualizar || _pendente is not null) return;
+        if (!Atualizacao.PodeSeAtualizar || _pendente is not null || _trocando) return;
         try
         {
             using var prazo = new CancellationTokenSource(TimeSpan.FromMinutes(5));
@@ -315,36 +406,79 @@ internal sealed class Bandeja : ApplicationContext
             if (manifesto is null) return;
             _pendente = manifesto;
             Registro.Sessao($"atualização: versão {manifesto.Version} disponível");
+            _baixado = await Atualizacao.BaixarAsync(manifesto, prazo.Token);
+            MudouAtualizacao();
             await AplicarPendenteAsync();
         }
-        catch (Exception ex) when (ex is ExiladosException or OperationCanceledException or IOException or HttpRequestException)
+        catch (Exception ex) when (ex is ExiladosException or OperationCanceledException or IOException or HttpRequestException or UnauthorizedAccessException)
         {
+            _pendente = null;
+            _baixado = null;
             Registro.Sessao($"atualização: {ex.Message}");
         }
     }
 
-    // A troca do executável só acontece sem live no ar e sem a pessoa usando a janela principal (ninguém perde a live
-    // ou a conversa de voz por causa de uma atualização); com ela em uso, tenta de novo daqui a 10 minutos.
+    private void MudouAtualizacao()
+    {
+        Avisar();
+        _principal?.AvisarAtualizacao();
+    }
+
+    /// <summary>Clicaram na setinha verde (ou em Reiniciar para atualizar): reinicia já na versão nova, com a janela aberta.</summary>
+    public async Task AtualizarAgoraAsync()
+    {
+        if (AtualizacaoPronta is not { } versao || _trocando || Comecando) return;
+        if (Live is not null)
+        {
+            string texto = $"A sua live vai parar para o Exilados reiniciar na versão {versao}. Continuar?";
+            var resposta = _principal is { Visible: true } janela
+                ? MessageBox.Show(janela, texto, "Exilados", MessageBoxButtons.YesNo, MessageBoxIcon.Question)
+                : MessageBox.Show(texto, "Exilados", MessageBoxButtons.YesNo, MessageBoxIcon.Question);
+            if (resposta != DialogResult.Yes) return;
+            await PararAsync(aplicarDepois: false);
+        }
+        await InstalarAsync(abrirJanela: true);
+    }
+
+    // Sem clique na setinha, a troca acontece com a janela fechada, sem live no ar e fora da voz (ninguém perde a live
+    // ou a conversa por causa de uma atualização); com a janela em uso, tenta de novo daqui a 10 minutos.
     private async Task AplicarPendenteAsync()
     {
-        if (_pendente is not { } manifesto || Live is not null || Comecando) return;
+        if (AtualizacaoPronta is null || Live is not null || Comecando || _trocando) return;
         if (await JanelaEmUsoAsync()) return;
+        if (AtualizacaoPronta is null || Live is not null || Comecando) return;
+        await InstalarAsync(abrirJanela: false);
+    }
+
+    /// <summary>
+    /// Troca pela versão já baixada e encerra; a nova abre sozinha (com a janela à vista, se <paramref name="abrirJanela"/>,
+    /// e com o aviso "Atualizando..." enquanto isso). Se a troca falhar, continua nesta versão.
+    /// </summary>
+    private async Task InstalarAsync(bool abrirJanela, JanelaAtualizando? aviso = null)
+    {
+        if (_pendente is not { } manifesto || _baixado is not { } novo || _trocando) return;
+        _trocando = true;
+        _tentarAtualizar.Stop();
+        bool avisoMeu = aviso is null && abrirJanela;
+        if (avisoMeu)
+        {
+            aviso = new JanelaAtualizando("Atualizando...");
+            aviso.Show();
+        }
         try
         {
-            using var prazo = new CancellationTokenSource(TimeSpan.FromMinutes(5));
-            string novo = await Atualizacao.BaixarAsync(manifesto, prazo.Token);
-            if (Live is not null || Comecando || await JanelaEmUsoAsync()) return;
             Registro.Sessao($"atualização: instalando a versão {manifesto.Version}");
-            Atualizacao.Aplicar(novo, manifesto);
-            _principal?.Fechar();
-            _icone.Visible = false;
-            _icone.Dispose();
-            ExitThread();
+            await Task.Run(() => Atualizacao.Aplicar(novo, manifesto, abrirJanela));
+            Encerrar();
         }
-        catch (Exception ex) when (ex is ExiladosException or OperationCanceledException or IOException or UnauthorizedAccessException)
+        catch (Exception ex) when (ex is ExiladosException or IOException or UnauthorizedAccessException)
         {
+            _trocando = false;
             _pendente = null;
+            _baixado = null;
             Registro.Sessao($"atualização: {ex.Message}");
+            if (avisoMeu) aviso?.Close();
+            MudouAtualizacao();
         }
     }
 
