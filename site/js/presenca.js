@@ -19,9 +19,19 @@ export function resumirPresenca(estado) {
       voz: naVoz ? naVoz.voz : null,
       mudo: naVoz ? Boolean(naVoz.mudo) : false,
       surdo: naVoz ? Boolean(naVoz.surdo) : false,
+      // Compartilhando a tela na sala de voz, e qual transmissão está assistindo (para contar quem assiste).
+      tela: naVoz ? Boolean(naVoz.tela) : false,
+      assistindo: naVoz?.assistindo || null,
     });
   }
   return resumo;
+}
+
+/** Quantos estão assistindo à tela de `id` (pela presença). */
+export function contarAssistindo(resumo, id) {
+  let n = 0;
+  for (const [quem, p] of resumo) if (quem !== id && p.assistindo === id) n += 1;
+  return n;
 }
 
 /** A live está no ar se o último sinal de vida tem até 20 s (no relógio do servidor). */

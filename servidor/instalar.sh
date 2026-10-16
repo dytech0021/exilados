@@ -41,6 +41,9 @@ chmod 600 /etc/exilados/api.env
 # As lives do Ponte acabaram (1.11.0): nada mais é repassado ao relay dele.
 sed -i 's|^RELAY_AUTH=.*|RELAY_AUTH=|' /etc/exilados/api.env
 IP_PUBLICO="$(ip -4 -o addr show scope global | awk '{print $4}' | cut -d/ -f1 | head -1)"
+# O LiveKit só reinicia quando a configuração ou o serviço dele mudam: publicar só o site não derruba quem está na voz.
+impressao_livekit() { cat /etc/exilados/livekit.yaml /etc/systemd/system/exilados-livekit.service 2>/dev/null | sha256sum; }
+LIVEKIT_ANTES="$(impressao_livekit)"
 ( umask 077
   sed -e "s|<CHAVE>|$(valor LIVEKIT_CHAVE)|" -e "s|<SEGREDO>|$(valor LIVEKIT_SEGREDO)|" -e "s|<IP_PUBLICO>|$IP_PUBLICO|" \
       "$AQUI/servidor/livekit.yaml.exemplo" > /etc/exilados/livekit.yaml.novo )
@@ -72,7 +75,11 @@ install -m 0644 "$AQUI/servidor/livekit.service" /etc/systemd/system/exilados-li
 install -m 0644 "$AQUI/servidor/exilados-api.service" /etc/systemd/system/exilados-api.service
 systemctl daemon-reload
 systemctl enable --quiet exilados-livekit exilados-api
-systemctl restart exilados-livekit exilados-api
+if [ "$(impressao_livekit)" != "$LIVEKIT_ANTES" ] || ! systemctl is-active --quiet exilados-livekit; then
+  echo "  configuração do LiveKit mudou: reiniciando (quem está na voz reconecta)"
+  systemctl restart exilados-livekit
+fi
+systemctl restart exilados-api
 for _ in $(seq 1 30); do
   curl -fsS -o /dev/null http://127.0.0.1:7415/saude 2>/dev/null && break
   sleep 0.5

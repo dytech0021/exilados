@@ -25,16 +25,17 @@ export const liveDe = (id) => {
 function itemNaVoz(id) {
   const membro = estado.membros.get(id) || { user_id: id, nome: 'Alguém' };
   const p = estado.presenca.get(id) || {};
-  const live = liveDe(id);
+  // Tela compartilhada na sala de voz (vista "tela") ou live do programa do Windows (vista "live").
+  const transmissao = p.tela && p.voz ? 'tela' : liveDe(id) ? 'live' : null;
   const li = el('li', { attrs: { tabindex: 0, title: membro.nome } },
     avatar(membro, { tamanho: 24, falando: falando(id) && !p.mudo }),
     el('span', { class: 'nome', text: membro.nome }),
     p.surdo ? icone('foneMudo', 'mudo') : p.mudo ? icone('micMudo', 'mudo') : null,
-    live ? el('button', {
+    transmissao ? el('button', {
       class: 'ao-vivo', text: 'Ao vivo', attrs: { title: `Assistir ${membro.nome}` },
-      onclick: (e) => { e.stopPropagation(); nav.irPara({ tipo: 'live', id }); },
+      onclick: (e) => { e.stopPropagation(); nav.irPara({ tipo: transmissao, id }); },
     }) : null);
-  li.addEventListener('click', (e) => (live ? nav.irPara({ tipo: 'live', id }) : cartaoPerfil(id, e.clientX + 8, e.clientY - 40)));
+  li.addEventListener('click', (e) => (transmissao ? nav.irPara({ tipo: transmissao, id }) : cartaoPerfil(id, e.clientX + 8, e.clientY - 40)));
   aoSegurar(li, (e) => menuMembro(id, e.clientX, e.clientY));
   return li;
 }
@@ -107,6 +108,7 @@ export function desenharTopoGrupo(topo) {
 function atividade(id) {
   const live = liveDe(id);
   const salaVoz = estado.presenca.get(id)?.voz;
+  if (salaVoz && estado.presenca.get(id)?.tela) return { texto: `Compartilhando a tela na ${nomeDaSala(salaVoz)}`, vivo: true };
   if (live) return { texto: salaVoz ? `Ao vivo na ${nomeDaSala(salaVoz)}` : 'Ao vivo', vivo: true };
   if (salaVoz) return { texto: `Na sala ${nomeDaSala(salaVoz)}`, vivo: false };
   return null;
@@ -167,9 +169,46 @@ export function desenharPainelVoz(painel) {
       el('div', { class: 'estado' },
         el('strong', { class: v.situacao === 'conectada' ? '' : 'aguardando' }, icone('ondas'), textos[v.situacao] || ''),
         el('span', { text: `${nomeDaSala(v.sala)} / Exilados${voz.rotaAtual() ? ` · ${voz.rotaAtual()}` : ''}` })),
+      voz.podeCompartilhar() && v.situacao === 'conectada'
+        ? botaoIcone('tela', v.tela ? 'Opções da sua transmissão' : 'Compartilhar a tela', (e) => menuDaTela(e.currentTarget), v.tela ? 'no-ar' : '')
+        : null,
       botaoIcone('fone', voz.ANDROID ? 'Fone ou celular' : 'Microfone', (e) => menuDeAparelhos(e.currentTarget)),
       botaoIcone('desligar', 'Sair da sala de voz', () => voz.sair().catch(erro))),
+    v.tela ? el('div', { class: 'compartilhando' },
+      el('span', { class: 'ao-vivo', text: 'Ao vivo' }),
+      el('span', { class: 'texto', text: 'Compartilhando a tela' }),
+      el('button', { text: 'Ver', title: 'Ver a sua transmissão', onclick: () => nav.irPara({ tipo: 'tela', id: meuId() }) }),
+      el('button', { class: 'parar', text: 'Parar', title: 'Parar de compartilhar', onclick: () => voz.pararTela().catch(erro) })) : null,
     v.semMicrofone ? el('div', { class: 'aviso-mic', text: 'Sem microfone: só ouvindo.' }) : null);
+}
+
+async function compartilhar(qualidade) {
+  try {
+    if (await voz.compartilharTela(qualidade)) nav.irPara({ tipo: 'tela', id: meuId() });
+  } catch (falha) {
+    erro(falha);
+  }
+}
+
+/** Menu do botão de tela no painel de voz: a qualidade antes de começar; ver, trocar ou parar depois. */
+function menuDaTela(botao) {
+  const r = botao.getBoundingClientRect();
+  const v = voz.voz;
+  if (v.tela) {
+    menu([
+      { rotulo: 'Ver a sua transmissão', icone: 'olho', fn: () => nav.irPara({ tipo: 'tela', id: meuId() }) },
+      { rotulo: 'Trocar o que está sendo mostrado', icone: 'tela', fn: () => compartilhar(v.tela.qualidade) },
+      'separador',
+      { rotulo: 'Parar de compartilhar', perigo: true, fn: () => voz.pararTela().catch(erro) },
+    ], r.left, r.top - 8 - 40 * 4);
+    return;
+  }
+  const ultima = voz.preferencias().qualidadeTela || voz.QUALIDADE_PADRAO;
+  const opcoes = Object.entries(voz.QUALIDADES);
+  menu([
+    { rotulo: 'Compartilhar a tela', titulo: true },
+    ...opcoes.map(([chave, q]) => ({ rotulo: `${chave === ultima ? '✓ ' : ''}${q.rotulo}`, fn: () => compartilhar(chave) })),
+  ], r.left, r.top - 8 - 40 * (opcoes.length + 1));
 }
 
 /** Menu rápido do painel de voz: por onde a voz entra (e, no Android, por onde o som sai também). */
@@ -237,6 +276,7 @@ export function menuMembro(id, x, y) {
   const amizade = amizadeCom(id);
   menu([
     { rotulo: 'Perfil', fn: () => cartaoPerfil(id, x, y) },
+    estado.presenca.get(id)?.tela ? { rotulo: souEu ? 'Ver a sua transmissão' : 'Assistir à tela', fn: () => nav.irPara({ tipo: 'tela', id }) } : null,
     liveDe(id) ? { rotulo: 'Assistir à live', fn: () => nav.irPara({ tipo: 'live', id }) } : null,
     !souEu && amizade?.estado === 'aceita' ? { rotulo: 'Mensagem', fn: () => nav.abrirDM(id) } : null,
     !souEu && !amizade ? { rotulo: 'Adicionar amigo', fn: () => nav.pedirAmizade(id) } : null,

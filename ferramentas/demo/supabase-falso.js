@@ -1,8 +1,10 @@
 // Supabase de mentira para ver e testar o site sem contas de verdade (modo de demonstração local).
 // Imita só o que o site usa: login, consultas simples, funções, imagens, mudanças em tempo real e presença.
 // Uma pessoa fictícia fala de vez em quando, manda mensagens e fica "ao vivo".
+// Com ?como=lucas (ou marina, bia) a aba entra como outra pessoa; abas abertas ao mesmo tempo dividem a presença
+// (para testar duas pessoas na mesma sala de voz, como compartilhar e assistir uma tela).
 (function () {
-  const EU = '00000000-0000-4000-8000-000000000001';
+  const DYEGO = '00000000-0000-4000-8000-000000000001';
   const LUCAS = '00000000-0000-4000-8000-000000000002';
   const MARINA = '00000000-0000-4000-8000-000000000003';
   const BIA = '00000000-0000-4000-8000-000000000004';
@@ -13,6 +15,8 @@
   const V_GERAL = '10000000-0000-4000-8000-000000000003';
   const V_JOGANDO = '10000000-0000-4000-8000-000000000004';
   const parametros = new URLSearchParams(location.search);
+  const EU = { lucas: LUCAS, marina: MARINA, bia: BIA }[parametros.get('como')] || DYEGO;
+  const MEU_NOME = { [LUCAS]: 'Lucas', [MARINA]: 'Marina', [BIA]: 'Bia' }[EU] || 'Dyego';
   const semLogin = parametros.has('sair');
   const comoMembro = !parametros.has('convite-demo');
   const agora = Date.now();
@@ -22,7 +26,7 @@
   let idMensagem = 1000;
   const db = {
     exilados_membros: [
-      { user_id: EU, nome: 'Dyego', avatar: null, papel: 'dono', ativo: true, entrou_em: iso(agora - 30 * 864e5) },
+      { user_id: DYEGO, nome: 'Dyego', avatar: null, papel: 'dono', ativo: true, entrou_em: iso(agora - 30 * 864e5) },
       { user_id: LUCAS, nome: 'Lucas', avatar: null, papel: 'membro', ativo: true, entrou_em: iso(agora - 20 * 864e5) },
       { user_id: MARINA, nome: 'Marina', avatar: null, papel: 'membro', ativo: true, entrou_em: iso(agora - 10 * 864e5) },
       { user_id: BIA, nome: 'Bia', avatar: null, papel: 'membro', ativo: true, entrou_em: iso(agora - 5 * 864e5) },
@@ -215,6 +219,7 @@
     }
     async track(meta) {
       minha = meta;
+      entreAbas?.postMessage({ id: EU, meta });
       this.disparar('presence', 'sync');
       return 'ok';
     }
@@ -227,6 +232,23 @@
 
   function canalGrupo() {
     return canais.find((c) => c.nome === 'exilados');
+  }
+
+  // Presença dividida entre as abas da demonstração abertas neste navegador.
+  const entreAbas = typeof BroadcastChannel === 'function' ? new BroadcastChannel('exilados-demo-presenca') : null;
+  if (entreAbas) {
+    entreAbas.onmessage = ({ data }) => {
+      if (data?.pedir) {
+        if (minha) entreAbas.postMessage({ id: EU, meta: minha });
+        return;
+      }
+      if (!data?.id || data.id === EU) return;
+      if (data.meta) presencaOutros[data.id] = [data.meta];
+      else delete presencaOutros[data.id];
+      canalGrupo()?.disparar('presence', 'sync');
+    };
+    entreAbas.postMessage({ pedir: true });
+    addEventListener('pagehide', () => entreAbas.postMessage({ id: EU, meta: null }));
   }
 
   // A pessoa fictícia: fala na sala de voz, manda mensagem de vez em quando, e a live mantém o sinal de vida.
@@ -246,7 +268,7 @@
     emitir('exilados_lives', 'UPDATE', { ...live });
   }, 10000);
 
-  const sessao = () => ({ access_token: 'demo', refresh_token: 'demo', expires_at: Math.floor(Date.now() / 1000) + 3600, user: { id: EU, email: 'demo@exemplo.com', user_metadata: { full_name: 'Dyego' } } });
+  const sessao = () => ({ access_token: `demo-${EU}`, refresh_token: 'demo', expires_at: Math.floor(Date.now() / 1000) + 3600, user: { id: EU, email: 'demo@exemplo.com', user_metadata: { full_name: MEU_NOME } } });
   let logado = !semLogin;
   const ouvintesAuth = [];
 

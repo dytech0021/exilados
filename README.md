@@ -1,10 +1,13 @@
 # Exilados
 
-Lugar do grupo para conversar por texto e voz e assistir às lives uns dos outros, com o jeito do Discord.
+Lugar do grupo para conversar por texto e voz, compartilhar a tela na sala de voz e assistir às lives uns dos
+outros, com o jeito do Discord.
 
 - **Site:** https://filabox3d.com.br/exilados/ (funciona no navegador do PC, do Android e do iPhone, e pode ser
   instalado como aplicativo).
-- **Programa para Windows:** só para transmitir um jogo ou a tela com qualidade e som isolado do programa.
+- **Compartilhar a tela:** pelo site no computador, dentro da sala de voz (botão de tela no painel de voz); quem
+  está na sala assiste no PC ou no celular.
+- **Programa para Windows:** para transmitir um jogo com o som só dele (isolado do resto do PC).
 - **Entrar no grupo:** só com um link de convite de um membro.
 
 ## Como é feito

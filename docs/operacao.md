@@ -72,8 +72,8 @@ on conflict (user_id) do update set papel = 'dono', ativo = true;
 | Voz pela internet | `lk load-test --url wss://filabox3d.com.br/exilados --room teste --audio-publishers 1 --subscribers 2` (com a chave do `api.env`) |
 | Programa do Windows | `Exilados.exe --autoteste pasta` (com uma conta guardada no programa, testa também a live pelo servidor) |
 | Janelas do programa | `Exilados.exe --captura-ui pasta` |
-| Site sem contas | `node ferramentas/demo/servidor.mjs` e abrir http://localhost:5180/exilados/ (Supabase de mentira; `--livekit arquivo` liga a voz de verdade) |
-| Testes | `cd api && node --test` (29) e `cd site && node --test` (16) |
+| Site sem contas | `node ferramentas/demo/servidor.mjs` e abrir http://localhost:5180/exilados/ (Supabase de mentira; `--livekit arquivo` liga a voz de verdade; outra aba com `?como=lucas` entra como outra pessoa, para testar a tela compartilhada) |
+| Testes | `cd api && node --test` (29) e `cd site && node --test` (17) |
 
 Registros do programa: `%APPDATA%\Exilados\sessoes.txt` (início, fim e quedas das lives) e `erros.txt`.
 
@@ -87,6 +87,9 @@ Registros do programa: `%APPDATA%\Exilados\sessoes.txt` (início, fim e quedas d
    uma mensagem direta.
 4. Os dois: entrar na sala de voz Geral; conferir o anel verde de quem fala; trocar microfone e saída em
    Configurações → Voz e áudio sem sair da sala; ajustar o volume do outro (botão direito no nome).
+   Dono (no PC): botão de tela no painel de voz → qualidade → escolher uma janela ou a tela inteira (marcar "Compartilhar
+   áudio do sistema"); amigo: clicar em AO VIVO ao lado do nome (no PC e no celular), conferir imagem, som e o
+   número de quem assiste; dono: "Parar".
 5. Dono: baixar o programa em Configurações → Transmitir, entrar ao vivo com um jogo; amigo: clicar em AO VIVO
    (no PC e no celular) e conferir imagem e som.
 6. Dono: remover o amigo em Configurações → Membros e conferir que ele cai da voz e perde o acesso; readmitir.
@@ -96,5 +99,6 @@ Registros do programa: `%APPDATA%\Exilados\sessoes.txt` (início, fim e quedas d
 | Situação | O que fazer |
 |---|---|
 | iPhone: a voz para ao trocar de aplicativo ou apagar a tela | Limite do Safari; volta ao abrir o site. |
+| Som da tela compartilhada pelo site | No Windows o Chrome/Edge manda o som do sistema todo (outros programas também); o site pede para deixar de fora o som da própria sala, o que os navegadores atuais respeitam. Se alguém ouvir o próprio eco, desmarque o som ao compartilhar. Para mandar só o som do jogo, use o programa do Windows. |
 | Rede que bloqueia UDP | A voz usa o TCP 7881 e as lives o TCP 8189 sozinhas. Sem TURN nesta versão. |
 | `MissingPartition` no canal de presença | O Supabase cria as partições de `realtime.messages` sozinho; na primeira vez pode falhar uma vez. |

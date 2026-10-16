@@ -22,7 +22,7 @@ export function lerJwt(token, segredo) {
   }
 }
 
-/** Permissão de entrar numa sala de voz: só publicar o microfone e ouvir os outros. */
+/** Permissão de entrar numa sala de voz: publicar o microfone e a tela compartilhada (vídeo e som) e receber os outros. */
 export function tokenDoLiveKit({ chave, segredo, identidade, nome, sala, segundos = 600, agora = Date.now() }) {
   const s = Math.floor(agora / 1000);
   return assinarJwt({
@@ -38,7 +38,7 @@ export function tokenDoLiveKit({ chave, segredo, identidade, nome, sala, segundo
       canSubscribe: true,
       canPublishData: false,
       canUpdateOwnMetadata: false,
-      canPublishSources: ['microphone'],
+      canPublishSources: ['microphone', 'screen_share', 'screen_share_audio'],
     },
   }, segredo);
 }

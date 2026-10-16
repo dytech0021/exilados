@@ -1,18 +1,20 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { LimitadorFala, liveNoAr, resumirPresenca } from '../js/presenca.js';
+import { contarAssistindo, LimitadorFala, liveNoAr, resumirPresenca } from '../js/presenca.js';
 
 test('online se alguma aba está online; sala de voz da aba que entrou por último', () => {
   const resumo = resumirPresenca({
-    a: [{ status: 'ausente' }, { status: 'online', voz: 's1', desde: 10, mudo: true }],
+    a: [{ status: 'ausente' }, { status: 'online', voz: 's1', desde: 10, mudo: true, tela: true }],
     b: [{ status: 'ausente' }],
-    c: [{ status: 'online', voz: 's1', desde: 5 }, { status: 'online', voz: 's2', desde: 9, surdo: true }],
+    c: [{ status: 'online', voz: 's1', desde: 5 }, { status: 'online', voz: 's2', desde: 9, surdo: true, assistindo: 'a' }],
     d: [],
   });
-  assert.deepEqual(resumo.get('a'), { status: 'online', voz: 's1', mudo: true, surdo: false });
-  assert.deepEqual(resumo.get('b'), { status: 'ausente', voz: null, mudo: false, surdo: false });
-  assert.deepEqual(resumo.get('c'), { status: 'online', voz: 's2', mudo: false, surdo: true });
+  assert.deepEqual(resumo.get('a'), { status: 'online', voz: 's1', mudo: true, surdo: false, tela: true, assistindo: null });
+  assert.deepEqual(resumo.get('b'), { status: 'ausente', voz: null, mudo: false, surdo: false, tela: false, assistindo: null });
+  assert.deepEqual(resumo.get('c'), { status: 'online', voz: 's2', mudo: false, surdo: true, tela: false, assistindo: 'a' });
   assert.equal(resumo.has('d'), false);
+  assert.equal(contarAssistindo(resumo, 'a'), 1);
+  assert.equal(contarAssistindo(resumo, 'c'), 0);
 });
 
 test('live no ar só com sinal de até 20 s no relógio do servidor', () => {

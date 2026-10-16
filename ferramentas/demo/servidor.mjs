@@ -10,12 +10,12 @@ import { tokenDoLiveKit } from '../../api/src/jwt.mjs';
 
 const aqui = path.dirname(fileURLToPath(import.meta.url));
 // Chave do LiveKit para testar a voz de verdade: variáveis de ambiente ou um arquivo (--livekit arquivo) com
-// LIVEKIT_CHAVE=... e LIVEKIT_SEGREDO=... (fora do repositório).
+// LIVEKIT_CHAVE=... e LIVEKIT_SEGREDO=... (fora do repositório) e, para um LiveKit local, LIVEKIT_URL=ws://localhost:7880.
 const posicao = process.argv.indexOf('--livekit');
 if (posicao > 0) {
   for (const linha of (await readFile(process.argv[posicao + 1], 'utf8')).split(/\r?\n/)) {
     const [nome, ...resto] = linha.split('=');
-    if (/^LIVEKIT_(CHAVE|SEGREDO)$/.test(nome.trim())) process.env[nome.trim()] = resto.join('=').trim();
+    if (/^LIVEKIT_(CHAVE|SEGREDO|URL)$/.test(nome.trim())) process.env[nome.trim()] = resto.join('=').trim();
   }
 }
 const site = path.resolve(aqui, '../../site');
@@ -30,15 +30,25 @@ function json(resposta, status, dados) {
   resposta.end(JSON.stringify(dados));
 }
 
-async function api(caminho, corpo, resposta) {
+// Quem chama: a aba da demonstração manda "demo-<id>" como sessão (?como=lucas entra como o Lucas).
+const NOMES = {
+  '00000000-0000-4000-8000-000000000001': 'Dyego',
+  '00000000-0000-4000-8000-000000000002': 'Lucas',
+  '00000000-0000-4000-8000-000000000003': 'Marina',
+  '00000000-0000-4000-8000-000000000004': 'Bia',
+};
+
+async function api(caminho, corpo, resposta, autorizacao = '') {
+  const quem = /^Bearer demo-([0-9a-f-]{36})$/.exec(autorizacao)?.[1];
+  const identidade = NOMES[quem] ? quem : '00000000-0000-4000-8000-000000000001';
   if (caminho === '/saude') return json(resposta, 200, { ok: true, agora: Date.now() });
   if (caminho === '/voz/entrar') {
     if (!process.env.LIVEKIT_CHAVE || !process.env.LIVEKIT_SEGREDO) return json(resposta, 503, { erro: 'Voz indisponível na demonstração (sem chave do LiveKit).' });
     const sala = `sala-${corpo.sala}`;
     return json(resposta, 200, {
-      url: 'wss://filabox3d.com.br/exilados',
+      url: process.env.LIVEKIT_URL || 'wss://filabox3d.com.br/exilados',
       sala,
-      token: tokenDoLiveKit({ chave: process.env.LIVEKIT_CHAVE, segredo: process.env.LIVEKIT_SEGREDO, identidade: '00000000-0000-4000-8000-000000000001', nome: 'Dyego', sala: process.env.SALA_TESTE || sala }),
+      token: tokenDoLiveKit({ chave: process.env.LIVEKIT_CHAVE, segredo: process.env.LIVEKIT_SEGREDO, identidade, nome: NOMES[identidade], sala: process.env.SALA_TESTE || sala }),
     });
   }
   if (caminho === '/live/assistir') return json(resposta, 404, { erro: 'A live terminou.' });
@@ -55,7 +65,7 @@ http.createServer(async (pedido, resposta) => {
   if (url.pathname.startsWith('/exilados/api/')) {
     let texto = '';
     for await (const parte of pedido) texto += parte;
-    return api(url.pathname.slice('/exilados/api'.length), texto ? JSON.parse(texto) : {}, resposta);
+    return api(url.pathname.slice('/exilados/api'.length), texto ? JSON.parse(texto) : {}, resposta, pedido.headers.authorization);
   }
   if (!url.pathname.startsWith('/exilados/')) {
     resposta.writeHead(404);

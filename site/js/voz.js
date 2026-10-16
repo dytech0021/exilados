@@ -1,15 +1,29 @@
 // Salas de voz pelo LiveKit: entrar e sair, silenciar, desligar o som, volume de cada pessoa (0–200%), escolha de
-// microfone e de saída com troca na hora, e o volume de entrada.
+// microfone e de saída com troca na hora, o volume de entrada e compartilhar a tela (como no Discord).
 //
 // O microfone passa por um ganho (Web Audio) antes de ser publicado, para o volume de entrada valer na hora; a
 // redução de ruído, o cancelamento de eco e o ajuste de ganho do navegador ficam sempre ligados.
+//
+// A voz de todos chega sozinha; a tela de alguém (vídeo e som) só chega para quem abriu a transmissão dela, para não
+// gastar a internet de quem não está assistindo.
 import { LIVEKIT_SCRIPT } from './config.js';
 import { atualizarPresenca, avisarQueFalo } from './dados.js';
 import { avisar, estado, meuId } from './estado.js';
 import { api } from './supa.js';
 import { aviso } from './ui.js';
 
-export const voz = { situacao: 'desligada', sala: null, mudo: false, surdo: false, semMicrofone: false };
+// tela: { qualidade, som } enquanto compartilha a própria tela; assistindo: de quem é a tela aberta (ou null).
+export const voz = {
+  situacao: 'desligada', sala: null, mudo: false, surdo: false, semMicrofone: false, tela: null, assistindo: null,
+};
+
+/** Qualidades de compartilhamento de tela (o vídeo vai em H.264, que os computadores codificam no próprio chip). */
+export const QUALIDADES = {
+  '720p30': { rotulo: '720p · 30 fps', largura: 1280, altura: 720, fps: 30, bitrate: 2_500_000 },
+  '1080p30': { rotulo: '1080p · 30 fps', largura: 1920, altura: 1080, fps: 30, bitrate: 4_500_000 },
+  '1080p60': { rotulo: '1080p · 60 fps', largura: 1920, altura: 1080, fps: 60, bitrate: 6_000_000 },
+};
+export const QUALIDADE_PADRAO = '1080p30';
 
 /**
  * No Android, o Chrome trata o microfone e o som da chamada como uma rota só (fone Bluetooth, fone com fio,
@@ -24,6 +38,7 @@ estado.falandoNaSala = new Set();
 let LK = null;
 let sala = null;
 let microfone = null; // { bruto, ctx, ganho, analisador, faixa, trilha }
+let tela = null; // a própria tela compartilhada: { fluxo, video, som }
 let saindo = false;
 const elementos = new Map(); // faixa -> <audio>
 
@@ -71,12 +86,29 @@ export function volumeEfetivo(id) {
 
 function aplicarVolume(id) {
   const participante = sala?.remoteParticipants.get(id);
-  if (participante) participante.setVolume(voz.surdo ? 0 : volumeEfetivo(id));
+  if (!participante) return;
+  participante.setVolume(voz.surdo ? 0 : volumeEfetivo(id));
+  participante.setVolume(voz.surdo ? 0 : volumeDaTelaEfetivo(), LK.Track.Source.ScreenShareAudio);
 }
 
 /** Volume de saída geral (todos da sala), de 0 ao máximo do aparelho. */
 export function definirVolumeSaida(porcento) {
   preferencias().volumeSaida = Math.max(0, Math.min(VOLUME_MAXIMO, Math.round(porcento)));
+  guardar();
+  for (const id of sala?.remoteParticipants.keys() || []) aplicarVolume(id);
+}
+
+/** Volume do som das telas compartilhadas (um só para todas), de 0 ao máximo do aparelho. */
+export function volumeDaTela() {
+  return preferencias().volumeTela ?? 100;
+}
+
+function volumeDaTelaEfetivo() {
+  return Math.min(volumeDaTela() * (preferencias().volumeSaida / 100), VOLUME_MAXIMO) / 100;
+}
+
+export function definirVolumeDaTela(porcento) {
+  preferencias().volumeTela = Math.max(0, Math.min(VOLUME_MAXIMO, Math.round(porcento)));
   guardar();
   for (const id of sala?.remoteParticipants.keys() || []) aplicarVolume(id);
 }
@@ -237,34 +269,77 @@ async function publicarMicrofone() {
   aviso('Não deu para ligar o seu microfone agora: você está só ouvindo. Saia e entre de novo na sala para tentar outra vez.', { tipo: 'erro', duracao: 10000 });
 }
 
-function anexar(faixa, participante) {
-  if (faixa.kind !== 'audio') return;
+const ehDaTela = (pub) => pub.source === LK.Track.Source.ScreenShare || pub.source === LK.Track.Source.ScreenShareAudio;
+
+/** A voz de todos é recebida sempre; a tela (vídeo e som), só a de quem está sendo assistido; câmera, nunca. */
+function decidirRecebimento(pub, participante) {
+  const receber = ehDaTela(pub) ? voz.assistindo === participante.identity : pub.kind === 'audio';
+  if (receber) pub.setSubscribed(true);
+}
+
+function anexar(faixa, pub, participante) {
+  if (faixa.kind !== 'audio') {
+    if (ehDaTela(pub)) avisar('telas');
+    return;
+  }
+  // Som da voz e som da tela: cada um num <audio> (o vídeo da tela é mostrado por tela.js).
   const elemento = faixa.attach();
   elemento.dataset.quem = participante.identity;
   document.body.append(elemento);
   elementos.set(faixa, elemento);
   aplicarVolume(participante.identity);
+  if (ehDaTela(pub)) avisar('telas');
 }
 
-function desanexar(faixa) {
-  faixa.detach().forEach((e) => e.remove());
-  elementos.delete(faixa);
+function desanexar(faixa, pub) {
+  // A biblioteca às vezes já soltou a faixa do <audio> antes do aviso: remove o elemento guardado de qualquer jeito.
+  const elemento = elementos.get(faixa);
+  if (elemento) {
+    faixa.detach(elemento);
+    elemento.remove();
+    elementos.delete(faixa);
+  }
+  if (pub && ehDaTela(pub)) avisar('telas');
+}
+
+function soltarTela() {
+  if (!tela) return;
+  tela.fluxo.getTracks().forEach((p) => p.stop());
+  tela.video?.stop();
+  tela.som?.stop();
+  tela = null;
 }
 
 function limpar() {
   for (const faixa of [...elementos.keys()]) desanexar(faixa);
   fecharMicrofone(microfone);
   microfone = null;
+  soltarTela();
+  voz.tela = null;
+  voz.assistindo = null;
   sala = null;
   estado.falandoNaSala.clear();
   avisarQueFalo(false);
+  avisar('telas');
 }
+
+// O que a presença diz quando sai da sala de voz.
+const FORA_DA_VOZ = { voz: null, tela: false, assistindo: null };
 
 function montarEventos(LKC, room) {
   const E = LKC.RoomEvent;
   room
-    .on(E.TrackSubscribed, (faixa, _pub, participante) => anexar(faixa, participante))
-    .on(E.TrackUnsubscribed, (faixa) => desanexar(faixa))
+    .on(E.TrackPublished, (pub, participante) => {
+      decidirRecebimento(pub, participante);
+      if (ehDaTela(pub)) avisar('telas');
+    })
+    .on(E.TrackUnpublished, (pub) => { if (ehDaTela(pub)) avisar('telas'); })
+    .on(E.TrackSubscribed, (faixa, pub, participante) => anexar(faixa, pub, participante))
+    .on(E.TrackUnsubscribed, (faixa, pub) => desanexar(faixa, pub))
+    .on(E.LocalTrackUnpublished, (pub) => {
+      // O servidor tirou a tela do ar (ou a conexão a perdeu de vez): para de compartilhar aqui também.
+      if (tela && pub.track === tela.video) pararTela().catch(() => {});
+    })
     .on(E.ActiveSpeakersChanged, (quem) => {
       estado.falandoNaSala = new Set(quem.map((p) => p.identity));
       avisarQueFalo(!voz.mudo && !voz.surdo && estado.falandoNaSala.has(meuId()));
@@ -280,7 +355,7 @@ function montarEventos(LKC, room) {
     })
     .on(E.MediaDevicesChanged, () => avisar('dispositivos'))
     .on(E.ParticipantConnected, () => mudou())
-    .on(E.ParticipantDisconnected, () => mudou())
+    .on(E.ParticipantDisconnected, () => { mudou(); avisar('telas'); })
     .on(E.Disconnected, (motivo) => {
       if (room !== sala) return;
       const removido = motivo === LKC.DisconnectReason?.PARTICIPANT_REMOVED;
@@ -288,7 +363,7 @@ function montarEventos(LKC, room) {
       const antes = voz.sala;
       voz.situacao = 'desligada';
       voz.sala = null;
-      atualizarPresenca({ voz: null });
+      atualizarPresenca(FORA_DA_VOZ);
       mudou();
       if (!saindo && antes) {
         aviso(removido ? 'Você foi tirado da sala de voz.' : 'A conexão de voz caiu.', removido ? { tipo: 'erro' } : {
@@ -340,10 +415,17 @@ export async function entrar(salaId) {
     });
     sala = room;
     montarEventos(LK, room);
-    await room.connect(permissao.url, permissao.token, { autoSubscribe: true });
+    // Sem receber tudo sozinho: a voz é pedida aqui e em TrackPublished; a tela, só ao assistir.
+    await room.connect(permissao.url, permissao.token, { autoSubscribe: false });
     if (sala !== room) return;
+    for (const participante of room.remoteParticipants.values()) {
+      for (const pub of participante.trackPublications.values()) decidirRecebimento(pub, participante);
+    }
     voz.situacao = 'conectada';
-    atualizarPresenca({ voz: salaId, mudo: voz.mudo || voz.surdo, surdo: voz.surdo });
+    atualizarPresenca({
+      voz: salaId, mudo: voz.mudo || voz.surdo, surdo: voz.surdo, tela: false, assistindo: null,
+    });
+    avisar('telas');
     mudou();
     await room.startAudio().catch(() => {});
     if (ANDROID && !preferencias().dicaVolume) {
@@ -359,7 +441,7 @@ export async function entrar(salaId) {
     room?.disconnect().catch(() => {});
     voz.situacao = 'desligada';
     voz.sala = null;
-    atualizarPresenca({ voz: null });
+    atualizarPresenca(FORA_DA_VOZ);
     mudou();
     // Erros do servidor do Exilados já vêm em português; os da conexão de voz, não.
     if (erro?.status !== undefined) throw erro;
@@ -375,13 +457,157 @@ export async function sair() {
   limpar();
   voz.situacao = 'desligada';
   voz.sala = null;
-  atualizarPresenca({ voz: null });
+  atualizarPresenca(FORA_DA_VOZ);
   mudou();
   try {
     await room?.disconnect();
   } finally {
     saindo = false;
   }
+}
+
+// ---------- compartilhar e assistir telas ----------
+
+/** Compartilhar a tela é só no computador: o navegador do celular não captura a tela. */
+export function podeCompartilhar() {
+  return !ANDROID && !/iPhone|iPad|iPod/i.test(navigator.userAgent) && typeof navigator.mediaDevices?.getDisplayMedia === 'function';
+}
+
+function capturarTela(q) {
+  return navigator.mediaDevices.getDisplayMedia({
+    // "max" reduz telas maiores mantendo a proporção; telas menores ficam no tamanho delas.
+    video: { width: { max: q.largura }, height: { max: q.altura }, frameRate: { ideal: q.fps, max: q.fps } },
+    // Som do jogo/vídeo como ele é (sem os filtros de voz) e, onde o navegador deixar, sem o som da própria sala.
+    audio: { echoCancellation: false, noiseSuppression: false, autoGainControl: false, restrictOwnAudio: true },
+    systemAudio: 'include',
+    windowAudio: 'system',
+    selfBrowserSurface: 'exclude',
+    surfaceSwitching: 'include',
+  });
+}
+
+/**
+ * Começa a compartilhar a tela (ou janela, ou aba) na sala de voz atual. Devolve false se a pessoa cancelou a
+ * escolha. Se já estiver compartilhando, troca pela nova escolha.
+ */
+export async function compartilharTela(qualidade = preferencias().qualidadeTela || QUALIDADE_PADRAO) {
+  if (!sala || voz.situacao !== 'conectada') throw new Error('Entre numa sala de voz para compartilhar a tela.');
+  if (!podeCompartilhar()) throw new Error('Compartilhar a tela só funciona no navegador do computador.');
+  const q = QUALIDADES[qualidade] || QUALIDADES[QUALIDADE_PADRAO];
+  const room = sala;
+  let fluxo;
+  try {
+    fluxo = await capturarTela(q);
+  } catch (erro) {
+    if (erro?.name === 'NotAllowedError' || erro?.name === 'AbortError') return false; // fechou a janela de escolha
+    console.error('Exilados: não deu para capturar a tela:', erro);
+    throw new Error('Não deu para capturar a tela neste navegador.');
+  }
+  if (sala !== room) {
+    fluxo.getTracks().forEach((p) => p.stop());
+    return false;
+  }
+  if (tela) await pararTela();
+  const pistaVideo = fluxo.getVideoTracks()[0];
+  const pistaSom = fluxo.getAudioTracks()[0] || null;
+  // Jogos e vídeos: o navegador mantém a fluidez e, com internet fraca, reduz a resolução antes do fps.
+  pistaVideo.contentHint = 'motion';
+  const nova = {
+    fluxo,
+    video: new LK.LocalVideoTrack(pistaVideo, undefined, true),
+    som: pistaSom ? new LK.LocalAudioTrack(pistaSom, undefined, true) : null,
+  };
+  tela = nova;
+  pistaVideo.addEventListener('ended', () => { if (tela === nova) pararTela().catch(() => {}); });
+  try {
+    await room.localParticipant.publishTrack(nova.video, {
+      source: LK.Track.Source.ScreenShare,
+      videoCodec: 'h264',
+      backupCodec: false,
+      simulcast: false,
+      screenShareEncoding: { maxBitrate: q.bitrate, maxFramerate: q.fps },
+    });
+    if (nova.som) {
+      await room.localParticipant.publishTrack(nova.som, {
+        source: LK.Track.Source.ScreenShareAudio,
+        audioPreset: LK.AudioPresets.musicHighQualityStereo,
+        dtx: false,
+        red: false,
+      });
+    }
+  } catch (erro) {
+    console.error('Exilados: a tela não foi publicada:', erro);
+    if (tela === nova) await pararTela();
+    throw new Error('Não deu para compartilhar a tela agora. Tente de novo.');
+  }
+  if (tela !== nova) return false;
+  voz.tela = { qualidade, som: Boolean(nova.som) };
+  preferencias().qualidadeTela = qualidade;
+  guardar();
+  atualizarPresenca({ tela: true });
+  mudou();
+  avisar('telas');
+  return true;
+}
+
+export async function pararTela() {
+  if (!tela) return;
+  const t = tela;
+  tela = null;
+  const estavaNoAr = Boolean(voz.tela);
+  voz.tela = null;
+  if (estavaNoAr && voz.sala) atualizarPresenca({ tela: false });
+  mudou();
+  avisar('telas');
+  const participante = sala?.localParticipant;
+  for (const faixa of [t.video, t.som]) {
+    if (!faixa) continue;
+    if (participante?.getTrackPublications().some((p) => p.track === faixa)) {
+      await participante.unpublishTrack(faixa, true).catch(() => {});
+    }
+    faixa.stop();
+  }
+  t.fluxo.getTracks().forEach((p) => p.stop());
+}
+
+function receberTelaDe(id, sim) {
+  const participante = sala?.remoteParticipants.get(id);
+  if (!participante) return;
+  for (const pub of participante.trackPublications.values()) if (ehDaTela(pub)) pub.setSubscribed(sim);
+}
+
+/** Abre a tela de `id` (precisa estar na mesma sala de voz). Só uma por vez, como no Discord. */
+export function assistirTela(id) {
+  if (!sala || voz.assistindo === id) return;
+  const antes = voz.assistindo;
+  voz.assistindo = id;
+  if (antes) receberTelaDe(antes, false);
+  receberTelaDe(id, true);
+  atualizarPresenca({ assistindo: id === meuId() ? null : id });
+  avisar('telas');
+}
+
+export function pararDeAssistir() {
+  if (!voz.assistindo) return;
+  const antes = voz.assistindo;
+  voz.assistindo = null;
+  receberTelaDe(antes, false);
+  if (voz.sala) atualizarPresenca({ assistindo: null });
+  avisar('telas');
+}
+
+/**
+ * O que se sabe da tela de `id` nesta sala: null se ela não está no ar aqui; senão { video, temSom, propria }, com
+ * `video` (faixa do LiveKit) ainda null enquanto o vídeo não chegou.
+ */
+export function telaDe(id) {
+  if (!sala) return null;
+  if (id === meuId()) return tela && voz.tela ? { video: tela.video, temSom: false, propria: true } : null;
+  const participante = sala.remoteParticipants.get(id);
+  const pubVideo = participante?.getTrackPublication(LK.Track.Source.ScreenShare);
+  if (!pubVideo) return null;
+  const pubSom = participante.getTrackPublication(LK.Track.Source.ScreenShareAudio);
+  return { video: pubVideo.isSubscribed ? pubVideo.track || null : null, temSom: Boolean(pubSom), propria: false };
 }
 
 async function aplicarCalado() {

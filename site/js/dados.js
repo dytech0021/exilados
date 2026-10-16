@@ -8,7 +8,10 @@ import { preparar } from './ui.js';
 let canalDados = null;
 let canalGrupo = null;
 let caiu = false;
-const minhaPresenca = { status: 'online', voz: null, mudo: false, surdo: false, desde: 0 };
+const minhaPresenca = {
+  status: 'online', voz: null, mudo: false, surdo: false, tela: false, assistindo: null, desde: 0,
+};
+let presencaSincronizada = false;
 const caminhosConhecidos = new Map();
 
 function porOrdem(a, b) {
@@ -117,7 +120,15 @@ function assinarGrupo() {
   });
   canalGrupo
     .on('presence', { event: 'sync' }, () => {
+      const antes = estado.presenca;
       estado.presenca = resumirPresenca(canalGrupo.presenceState());
+      // Alguém começou a compartilhar a tela (na primeira sincronia, o que já estava no ar não é novidade).
+      if (presencaSincronizada) {
+        for (const [id, p] of estado.presenca) {
+          if (p.tela && !antes.get(id)?.tela && id !== meuId()) avisar('telaComecou', id);
+        }
+      }
+      presencaSincronizada = true;
       for (const id of [...estado.falando]) {
         if (!estado.presenca.get(id)?.voz) estado.falando.delete(id);
       }

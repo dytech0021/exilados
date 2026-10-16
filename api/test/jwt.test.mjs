@@ -20,7 +20,7 @@ test('lerJwt recusa assinatura de outro segredo e formato inválido', () => {
   assert.equal(lerJwt('abc', SEGREDO), null);
 });
 
-test('token de voz só publica o microfone, na sala pedida, por 10 minutos', () => {
+test('token de voz publica só o microfone e a tela, na sala pedida, por 10 minutos', () => {
   const agora = 1_800_000_000_000;
   const token = tokenDoLiveKit({ chave: 'API1', segredo: SEGREDO, identidade: 'u1', nome: 'Ana', sala: 'sala-x', agora });
   const dados = lerJwt(token, SEGREDO);
@@ -30,7 +30,7 @@ test('token de voz só publica o microfone, na sala pedida, por 10 minutos', () 
   assert.equal(dados.exp - Math.floor(agora / 1000), 600);
   assert.equal(dados.video.room, 'sala-x');
   assert.equal(dados.video.roomJoin, true);
-  assert.deepEqual(dados.video.canPublishSources, ['microphone']);
+  assert.deepEqual(dados.video.canPublishSources, ['microphone', 'screen_share', 'screen_share_audio']);
   assert.equal(dados.video.canPublishData, false);
   assert.equal(dados.video.roomAdmin, undefined);
 });

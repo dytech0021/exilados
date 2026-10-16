@@ -8,7 +8,7 @@ import {
 import { BASE } from './config.js';
 import { blocoComeco, conversaAberta, fecharConversa, montarConversa, quandoClicarNoAutor } from './chat.js';
 import { abrirConfig, convidar } from './config-ui.js';
-import { carregarTudo, conectar } from './dados.js';
+import { carregarTudo, conectar, nomeDaSala } from './dados.js';
 import {
   agoraServidor, avisar, estado, meuId, nomeDe, ouvir,
 } from './estado.js';
@@ -16,6 +16,7 @@ import { cartaoPerfil, desenharSalas, desenharTopoGrupo, iniciarGrupo } from './
 import { fecharLive, montarLive } from './live.js';
 import { liveNoAr } from './presenca.js';
 import { conferir, sb } from './supa.js';
+import { fecharTela, montarTela } from './tela.js';
 import {
   avatar, aviso, botaoIcone, el, icone, limpar,
 } from './ui.js';
@@ -33,6 +34,8 @@ const partes = {
 };
 const celular = () => window.matchMedia('(max-width: 760px)').matches;
 const CHAVE_SALA = 'exilados-ultima-sala';
+// Vistas de assistir (live do programa do Windows ou tela compartilhada na voz): "Voltar" leva para antes delas.
+const assistindo = (tipo) => tipo === 'live' || tipo === 'tela';
 let vistaAnterior = null;
 
 // ---------- painéis (celular) e topo ----------
@@ -125,6 +128,16 @@ function desenharCentro() {
     montarLive(partes.centro, v.id, voltar);
     return;
   }
+  if (v.tipo === 'tela') {
+    const m = estado.membros.get(v.id) || { user_id: v.id, nome: 'Alguém' };
+    const salaVoz = estado.presenca.get(v.id)?.voz;
+    limpar(topo, botaoMenu(),
+      el('div', { class: 'titulo' }, avatar(m, { tamanho: 24 }), el('span', { text: v.id === meuId() ? 'Sua tela' : m.nome }),
+        el('span', { class: 'ao-vivo', text: 'Ao vivo' }), salaVoz ? el('span', { class: 'sub', text: nomeDaSala(salaVoz) }) : null),
+      botaoMembros(), botaoIcone('fechar', 'Fechar a transmissão', voltar));
+    montarTela(partes.centro, v.id, voltar);
+    return;
+  }
   if (v.tipo === 'amigos') {
     desenharAmigos(partes.centro, topo);
     return;
@@ -161,7 +174,8 @@ function desenharCentro() {
 
 function irPara(vista) {
   if (estado.vista.tipo === 'live' && vista.tipo !== 'live') fecharLive();
-  if (vista.tipo === 'live' && estado.vista.tipo !== 'live') vistaAnterior = { ...estado.vista };
+  if (estado.vista.tipo === 'tela' && vista.tipo !== 'tela') fecharTela();
+  if (assistindo(vista.tipo) && !assistindo(estado.vista.tipo)) vistaAnterior = { ...estado.vista };
   fecharConversa();
   estado.vista = { ...vista };
   if (vista.tipo === 'grupo') estado.modo = 'grupo';
@@ -174,7 +188,7 @@ function irPara(vista) {
 }
 
 function voltar() {
-  irPara(vistaAnterior && vistaAnterior.tipo !== 'live' ? vistaAnterior : { tipo: 'grupo', id: null });
+  irPara(vistaAnterior && !assistindo(vistaAnterior.tipo) ? vistaAnterior : { tipo: 'grupo', id: null });
 }
 
 const nav = {
@@ -219,6 +233,15 @@ function acompanhar() {
       acao: { rotulo: 'Assistir', fn: () => irPara({ tipo: 'live', id: live.user_id }) },
     });
   });
+  ouvir('telaComecou', (id) => {
+    const salaVoz = estado.presenca.get(id)?.voz;
+    if (!salaVoz || (estado.vista.tipo === 'tela' && estado.vista.id === id)) return;
+    aviso(`${nomeDe(id)} está compartilhando a tela na ${nomeDaSala(salaVoz)}`, {
+      tipo: 'vivo',
+      duracao: 12000,
+      acao: { rotulo: 'Assistir', fn: () => irPara({ tipo: 'tela', id }) },
+    });
+  });
   ouvir('salas', () => {
     if (estado.vista.tipo !== 'grupo') return;
     const sala = estado.salas.find((s) => s.id === estado.vista.id);
@@ -228,6 +251,7 @@ function acompanhar() {
   ouvir('removido', async () => {
     await voz.sair().catch(() => {});
     fecharLive();
+    fecharTela();
     telaAviso('Você não faz mais parte do Exilados', 'Sua entrada no grupo foi desfeita pelo dono. Só ele pode te readmitir.', estado.eu);
   });
   let faixa = null;
