@@ -400,9 +400,8 @@ button.ao-vivo:hover { background: var(--vermelho-escuro); }
 .live .sobre .botao { pointer-events: auto; }
 .live .barra {
   position: absolute; left: 0; right: 0; bottom: 0; display: flex; align-items: center; gap: 12px; padding: 12px 16px;
-  background: linear-gradient(transparent, rgba(0, 0, 0, .75)); color: #fff; opacity: 0; transition: opacity .2s;
+  background: linear-gradient(transparent, rgba(0, 0, 0, .75)); color: #fff;
 }
-.live:hover .barra, .live.mostrar-barra .barra, .live .barra:focus-within { opacity: 1; }
 .live .barra .botao-icone { color: #fff; }
 .live .barra .botao-icone:hover { background: rgba(255, 255, 255, .15); }
 .live .barra input[type="range"] { width: 110px; accent-color: #fff; }
@@ -410,6 +409,7 @@ button.ao-vivo:hover { background: var(--vermelho-escuro); }
 .live .barra .assistindo svg.icone { width: 16px; height: 16px; }
 .live .clique-som { pointer-events: auto; }
 .live .barra .controles-som { display: flex; align-items: center; gap: 12px; }
+.live .barra .controles-som[hidden] { display: none; }
 .live .barra .rotulo { font-size: 14px; color: rgba(255, 255, 255, .85); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 
 /* ---------- avisos, menus e janelas ---------- */

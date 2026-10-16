@@ -199,7 +199,6 @@ export function montarLive(corpo, usuario, aoFechar) {
     botaoTela);
   a.palco = el('div', { class: 'live' }, video, sobre, barra);
   video.addEventListener('playing', () => dizer(a, ''));
-  video.addEventListener('click', () => a.palco.classList.toggle('mostrar-barra'));
   video.addEventListener('dblclick', () => telaCheia(a));
   limpar(corpo, a.palco);
   dizer(a, 'Conectando à live...');

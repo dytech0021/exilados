@@ -60,8 +60,10 @@ function atualizar(a) {
   const voltar = el('button', { class: 'botao cinza', text: 'Voltar', onclick: a.aoFechar });
   a.contagem.textContent = String(contarAssistindo(estado.presenca, a.id));
   a.controlesSom.hidden = true;
+  a.semSom.hidden = true;
   a.botaoParar.hidden = !(propria && v.tela);
-  a.rotulo.textContent = propria && v.tela ? `Sua tela · ${voz.QUALIDADES[v.tela.qualidade]?.rotulo || ''}` : '';
+  a.rotulo.textContent = propria && v.tela
+    ? `Sua tela · ${voz.QUALIDADES[v.tela.qualidade]?.rotulo || ''}${v.tela.som ? '' : ' · sem áudio'}` : '';
 
   // Quem assiste precisa estar na sala de voz de quem compartilha.
   const salaDela = propria ? v.sala : p?.voz;
@@ -93,6 +95,7 @@ function atualizar(a) {
     return p?.tela ? dizer(a, 'Conectando à transmissão...') : dizer(a, 'A transmissão terminou.', voltar);
   }
   a.controlesSom.hidden = !t.temSom;
+  a.semSom.hidden = propria || t.temSom;
   if (!t.video) {
     soltarVideo(a);
     return dizer(a, 'Conectando à transmissão...');
@@ -135,16 +138,19 @@ export function montarTela(corpo, id, aoFechar) {
     atualizarSom(a);
   });
   a.controlesSom = el('span', { class: 'controles-som' }, a.botaoSom, faixaVolume);
+  a.semSom = el('span', {
+    class: 'rotulo', text: 'Transmissão sem áudio',
+    attrs: { title: 'Quem transmite precisa ativar “Compartilhar áudio do sistema” ao escolher a tela.' },
+  });
   a.rotulo = el('span', { class: 'rotulo' });
   a.botaoParar = el('button', { class: 'botao vermelho pequeno', text: 'Parar de compartilhar', onclick: () => voz.pararTela().catch(erro) });
   const botaoTela = botaoIcone('telaCheia', 'Tela cheia', () => telaCheia(a));
   const barra = el('div', { class: 'barra' },
-    a.controlesSom, a.rotulo,
+    a.controlesSom, a.semSom, a.rotulo,
     el('span', { class: 'assistindo', attrs: { title: 'Assistindo agora' } }, icone('olho'), contagem),
     a.botaoParar, botaoTela);
   a.palco = el('div', { class: 'live' }, video, sobre, barra);
   video.addEventListener('playing', () => { if (atual === a && a.faixa) dizer(a, ''); });
-  video.addEventListener('click', () => a.palco.classList.toggle('mostrar-barra'));
   video.addEventListener('dblclick', () => telaCheia(a));
   limpar(corpo, a.palco);
   atual = a;

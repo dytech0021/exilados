@@ -1,7 +1,7 @@
 // Service worker do Exilados (escopo /exilados/): guarda a casca do site para abrir rápido e funcionar como
 // aplicativo instalado. Sempre tenta a rede primeiro (o site muda sem aviso); a cópia guardada só entra quando a
 // rede falha. API, voz, lives e atualização nunca passam por aqui.
-const VERSAO = 'exilados-casca-4';
+const VERSAO = 'exilados-casca-5';
 const CASCA = [
   './',
   'index.html',
