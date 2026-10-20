@@ -59,7 +59,6 @@ internal sealed class Transmissao : IAsyncDisposable
         if (opcoes.Programa is { } programa)
         {
             if (!programa.TentarArea(out _)) throw new ExiladosException("Abra ou restaure a janela do programa escolhido.");
-            if (opcoes.Som && !SomDePrograma.Disponivel) throw new ExiladosException("Para transmitir só o som do programa, use o Windows 11 ou desligue o som da live.");
         }
         if (!ComponenteVideo.Presente)
         {
@@ -162,7 +161,9 @@ internal sealed class Transmissao : IAsyncDisposable
             canoImagem is null ? null : $@"\\.\pipe\{nomeImagem}"));
         using var parando = CancellationTokenSource.CreateLinkedTokenSource(ct);
         using var matar = parando.Token.Register(processo.Encerrar);
-        var som = canoSom is null ? Task.CompletedTask : Task.Run(() => BombearSomAsync(canoSom, _opcoes.Programa?.Processo ?? 0, parando.Token));
+        // Só o som do programa precisa do Windows 11; no Windows 10 vai o som do computador (a live nunca sai muda).
+        int processoDoSom = SomDePrograma.Disponivel ? _opcoes.Programa?.Processo ?? 0 : 0;
+        var som = canoSom is null ? Task.CompletedTask : Task.Run(() => BombearSomAsync(canoSom, processoDoSom, parando.Token));
         var imagem = capturaPrograma is null ? Task.CompletedTask : Task.Run(() => capturaPrograma.BombearAsync(canoImagem!, parando.Token));
         _ = imagem.ContinueWith(_ => processo.Encerrar(), CancellationToken.None, TaskContinuationOptions.OnlyOnFaulted | TaskContinuationOptions.ExecuteSynchronously, TaskScheduler.Default);
         _ = som.ContinueWith(_ => processo.Encerrar(), CancellationToken.None, TaskContinuationOptions.OnlyOnFaulted | TaskContinuationOptions.ExecuteSynchronously, TaskScheduler.Default);

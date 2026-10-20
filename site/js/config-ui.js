@@ -197,7 +197,7 @@ async function paginaVoz(secao) {
     el('h3', { text: 'Processamento' }),
     el('label', { class: 'opcao-voz' }, cancelamentoRuido, el('span', { text: 'Cancelamento de ruído do microfone' })),
     el('label', { class: 'opcao-voz' }, ruidoForte, el('span', { text: 'Filtragem forte para sons distantes' })),
-    el('p', { class: 'ajuda', text: 'A filtragem forte reduz o som de fundo entre as falas. Se sua voz ficar cortada, desligue apenas a filtragem forte. O cancelamento de eco continua ativo. O volume de cada pessoa se ajusta com o botão direito no nome dela (ou segurando, no celular).' }));
+    el('p', { class: 'ajuda', text: 'O cancelamento de ruído vem desligado: ele tira barulhos fortes de fundo, mas deixa a voz robótica e abafada. Ligue só se houver muito barulho onde você está. A filtragem forte reduz o som de fundo entre as falas; se sua voz ficar cortada, desligue a filtragem forte. A redução de ruído e o cancelamento de eco do navegador continuam ativos. O volume de cada pessoa se ajusta com o botão direito no nome dela (ou segurando, no celular).' }));
   await preencher();
   const pararOuvir = ouvir('dispositivos', preencher);
   return () => {

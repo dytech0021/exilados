@@ -38,9 +38,44 @@ test('Android começa com filtragem forte e som direto', async () => {
   assert.equal(voz.preferencias().ruidoForte, true);
 });
 
-test('navegador no computador mantém a escolha de saída e o ganho de até 200%', async () => {
+test('o cancelamento de ruído (RNNoise) começa desligado', async () => {
   navegador('Windows');
-  gravado.set(chave, JSON.stringify({ saida: 'saída escolhida' }));
+  gravado.set(chave, '{}');
+  const voz = await import('../js/voz.js?teste-ruido-novo');
+  assert.equal(voz.preferencias().cancelamentoRuido, false);
+});
+
+test('quem tinha o cancelamento de ruído ligado passa para desligado uma vez; depois vale a escolha', async () => {
+  navegador('Windows');
+  gravado.set(chave, JSON.stringify({ cancelamentoRuido: true }));
+  const antes = await import('../js/voz.js?teste-ruido-antigo');
+  assert.equal(antes.preferencias().cancelamentoRuido, false);
+  assert.equal(JSON.parse(gravado.get(chave)).cancelamentoRuido, false);
+
+  const religado = JSON.parse(gravado.get(chave));
+  religado.cancelamentoRuido = true;
+  gravado.set(chave, JSON.stringify(religado));
+  const depois = await import('../js/voz.js?teste-ruido-religado');
+  assert.equal(depois.preferencias().cancelamentoRuido, true);
+});
+
+test('microfone e saída escolhidos antes voltam uma vez ao padrão do Windows', async () => {
+  navegador('Windows');
+  delete window.exiladosPrograma;
+  gravado.set(chave, JSON.stringify({ entrada: 'microfone da webcam', saida: 'monitor HDMI' }));
+  const voz = await import('../js/voz.js?teste-aparelhos-antigos');
+  assert.equal(voz.preferencias().entrada, null);
+  assert.equal(voz.preferencias().saida, null);
+  const salvo = JSON.parse(gravado.get(chave));
+  assert.equal(salvo.entrada, null);
+  assert.equal(salvo.saida, null);
+});
+
+test('navegador no computador mantém a escolha de saída feita depois e o ganho de até 200%', async () => {
+  navegador('Windows');
+  const salvo = JSON.parse(gravado.get(chave));
+  salvo.saida = 'saída escolhida';
+  gravado.set(chave, JSON.stringify(salvo));
   const voz = await import('../js/voz.js?teste-navegador');
   assert.equal(voz.VOLUME_MAXIMO, 200);
   assert.equal(voz.preferencias().saida, 'saída escolhida');

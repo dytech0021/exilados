@@ -13,7 +13,8 @@ import { avisar, estado, meuId } from './estado.js';
 import { api } from './supa.js';
 import { opcoesPublicacaoTela, qualidadeRecebida } from './qualidade-tela.js';
 import { conectarFiltroRuido } from './filtro-ruido.js';
-import { aviso } from './ui.js';
+import { faltaSomDaTela } from './som-tela.js';
+import { aviso, confirmar } from './ui.js';
 
 // tela: { qualidade, som } enquanto compartilha a própria tela; assistindo: de quem é a tela aberta (ou null).
 export const voz = {
@@ -54,8 +55,17 @@ export function preferencias() {
     prefs.volumes ||= {};
     prefs.volumeEntrada ??= 100;
     prefs.volumeSaida ??= 100;
-    prefs.cancelamentoRuido ??= true;
+    prefs.cancelamentoRuido ??= false;
     prefs.ruidoForte ??= ANDROID;
+    if (!prefs.padroes1020) {
+      // Uma vez para todos: o RNNoise deixava a voz robótica e abafada, e o microfone e a saída voltam ao padrão do
+      // Windows (o aparelho escolhido antes podia ser outro). Depois, o que a pessoa escolher continua valendo.
+      prefs.cancelamentoRuido = false;
+      prefs.entrada = null;
+      prefs.saida = null;
+      prefs.padroes1020 = true;
+      try { localStorage.setItem(chavePrefs(), JSON.stringify(prefs)); } catch { /* sem armazenamento */ }
+    }
     if (PROGRAMA && !prefs.saidaEstereo25) {
       // A seleção antiga podia apontar para a saída mono de chamada do headset. Volta uma vez
       // à saída padrão do Windows; depois a escolha explícita do usuário continua valendo.
@@ -514,9 +524,36 @@ function capturarTela(q) {
   });
 }
 
+/** A pessoa escolheu a tela sem marcar o som do sistema (no Windows a tela só vai ao ar com som). */
+export class TelaSemSom extends Error {
+  constructor() {
+    super('A tela só pode ser compartilhada com o som.');
+  }
+}
+
+/**
+ * Compartilha a tela exigindo o som: se a pessoa não marcou a chave de som na janela de escolha, explica e, com o
+ * clique em "Escolher de novo", abre a escolha outra vez. Devolve false se ela desistir.
+ */
+export async function compartilharTelaComSom(qualidade) {
+  for (;;) {
+    try {
+      return await compartilharTela(qualidade);
+    } catch (falha) {
+      if (!(falha instanceof TelaSemSom)) throw falha;
+      const deNovo = await confirmar({
+        titulo: 'A tela vai com o som',
+        texto: 'A tela foi escolhida sem o som. Na próxima janela, ligue a chave "Compartilhar áudio do sistema" (ou "da guia", se for uma guia) antes de clicar em Compartilhar.',
+        botao: 'Escolher de novo',
+      });
+      if (!deNovo) return false;
+    }
+  }
+}
+
 /**
  * Começa a compartilhar a tela (ou janela, ou aba) na sala de voz atual. Devolve false se a pessoa cancelou a
- * escolha. Se já estiver compartilhando, troca pela nova escolha.
+ * escolha. Se já estiver compartilhando, troca pela nova escolha. Sem o som no Windows, lança TelaSemSom.
  */
 export async function compartilharTela(qualidade = preferencias().qualidadeTela || QUALIDADE_PADRAO) {
   if (!sala || voz.situacao !== 'conectada') throw new Error('Entre numa sala de voz para compartilhar a tela.');
@@ -534,6 +571,10 @@ export async function compartilharTela(qualidade = preferencias().qualidadeTela 
   if (sala !== room) {
     fluxo.getTracks().forEach((p) => p.stop());
     return false;
+  }
+  if (faltaSomDaTela(fluxo, navigator.userAgent)) {
+    fluxo.getTracks().forEach((p) => p.stop());
+    throw new TelaSemSom();
   }
   // Trocando o que é mostrado: tira a tela anterior do ar sem avisar que parou (quem assiste continua na tela).
   if (tela) await pararTela({ trocando: true });

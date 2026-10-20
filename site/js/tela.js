@@ -91,7 +91,7 @@ function atualizar(a) {
     soltarVideo(a);
     if (propria) {
       return dizer(a, 'Você não está compartilhando a tela.', el('button', {
-        class: 'botao', text: 'Compartilhar a tela', onclick: () => voz.compartilharTela().catch(erro),
+        class: 'botao', text: 'Compartilhar a tela', onclick: () => voz.compartilharTelaComSom().catch(erro),
       }));
     }
     return p?.tela ? dizer(a, 'Conectando à transmissão...') : dizer(a, 'A transmissão terminou.', voltar);

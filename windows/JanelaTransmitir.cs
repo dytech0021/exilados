@@ -1,8 +1,9 @@
 namespace Exilados;
 
 /// <summary>
-/// Janela Transmitir: uma tela (com o som do computador) ou um programa (só o som dele, Windows 11), qualidade,
-/// som, Entrar ao vivo, e a situação da live ("Ao vivo · 3 assistindo").
+/// Janela Transmitir: uma tela (com o som do computador) ou um programa (só o som dele no Windows 11; no Windows 10,
+/// o som do computador), qualidade, Entrar ao vivo, e a situação da live ("Ao vivo · 3 assistindo"). A live vai
+/// sempre com som.
 /// </summary>
 internal sealed class JanelaTransmitir : Form
 {
@@ -14,7 +15,6 @@ internal sealed class JanelaTransmitir : Form
     private readonly ComboBox _programas = Visual.Lista(Largura - 92);
     private readonly Button _atualizarProgramas = Visual.Botao("Atualizar", Visual.Cinza, 84);
     private readonly ComboBox _qualidade = Visual.Lista(Largura);
-    private readonly CheckBox _som = new() { Text = "Transmitir o som", AutoSize = true, ForeColor = Visual.Texto, Margin = new Padding(0, 4, 0, 4) };
     private readonly Label _situacao = Visual.Rotulo("", Largura, 10.5f, FontStyle.Bold);
     private readonly Button _principal = Visual.Botao("Entrar ao vivo", Visual.Vermelho, Largura);
     private readonly Label _aviso = Visual.Rotulo("", Largura, 9f, cor: Visual.Fraco);
@@ -36,7 +36,6 @@ internal sealed class JanelaTransmitir : Form
             Visual.Secao("O que transmitir", Largura),
             _porTela, _telas, _porPrograma, linhaProgramas,
             Visual.Secao("Qualidade", Largura), _qualidade,
-            _som,
             _situacao,
             _principal,
             _aviso,
@@ -49,10 +48,9 @@ internal sealed class JanelaTransmitir : Form
         var config = bandeja.Configuracao;
         int escolhida = Array.FindIndex(Qualidades, q => q.Altura == config.Altura && q.Quadros == config.Quadros);
         _qualidade.SelectedIndex = Math.Max(0, escolhida);
-        _som.Checked = config.Som;
         PreencherTelas(config.Tela);
         PreencherProgramas();
-        if (!SomDePrograma.Disponivel) _porPrograma.Text = "Um programa (só o som dele exige Windows 11)";
+        if (!SomDePrograma.Disponivel) _porPrograma.Text = "Um programa (com o som do computador; só o dele exige Windows 11)";
         (config.Fonte == "programa" ? _porPrograma : _porTela).Checked = true;
 
         _porTela.CheckedChanged += (_, _) => Habilitar();
@@ -91,7 +89,7 @@ internal sealed class JanelaTransmitir : Form
     private void Habilitar()
     {
         bool livre = _bandeja.Live is null && !_bandeja.Comecando;
-        _porTela.Enabled = _porPrograma.Enabled = _qualidade.Enabled = _som.Enabled = livre;
+        _porTela.Enabled = _porPrograma.Enabled = _qualidade.Enabled = livre;
         _telas.Enabled = livre && _porTela.Checked;
         _programas.Enabled = _atualizarProgramas.Enabled = livre && _porPrograma.Checked;
     }
@@ -141,7 +139,6 @@ internal sealed class JanelaTransmitir : Form
         var config = _bandeja.Configuracao;
         config.Altura = q.Altura;
         config.Quadros = q.Quadros;
-        config.Som = _som.Checked;
         config.Fonte = _porPrograma.Checked ? "programa" : "tela";
         var telas = Screen.AllScreens;
         int tela = Math.Clamp(_telas.SelectedIndex, 0, telas.Length - 1);
@@ -157,6 +154,6 @@ internal sealed class JanelaTransmitir : Form
                 return;
             }
         }
-        await _bandeja.ComecarAsync(new OpcoesLive(q.Altura, q.Quadros, _som.Checked, tela, programa));
+        await _bandeja.ComecarAsync(new OpcoesLive(q.Altura, q.Quadros, Som: true, tela, programa));
     }
 }

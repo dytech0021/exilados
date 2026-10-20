@@ -12,7 +12,6 @@ internal sealed class Config
     public string Token { get; set; } = "";
     public int Altura { get; set; } = 1080;
     public int Quadros { get; set; } = 60;
-    public bool Som { get; set; } = true;
     public bool AbrirComWindows { get; set; } = true;
     /// <summary>"tela" ou "programa".</summary>
     public string Fonte { get; set; } = "tela";

@@ -187,7 +187,7 @@ export function desenharPainelVoz(painel) {
 
 async function compartilhar(qualidade) {
   try {
-    if (await voz.compartilharTela(qualidade)) nav.irPara({ tipo: 'tela', id: meuId() });
+    if (await voz.compartilharTelaComSom(qualidade)) nav.irPara({ tipo: 'tela', id: meuId() });
   } catch (falha) {
     erro(falha);
   }
