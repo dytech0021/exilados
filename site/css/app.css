@@ -165,6 +165,11 @@ svg.icone { width: 20px; height: 20px; flex: none; fill: currentColor; display: 
 .trilho-separador { width: 32px; height: 2px; border-radius: 1px; background: #35363c; flex: none; }
 .trilho-botao.baixar { color: var(--verde); }
 .trilho-item:hover .trilho-botao.baixar { background: var(--verde); color: #fff; }
+/* App Android em janela flutuante: só o vídeo da live ou da tela, ocupando a janela. */
+body.modo-pip .centro-corpo .live { position: fixed; inset: 0; z-index: 1000; margin: 0; border-radius: 0; background: #000; }
+body.modo-pip .centro-corpo .live > :not(video) { display: none !important; }
+body.modo-pip .centro-corpo .live video { width: 100%; height: 100%; object-fit: contain; }
+body.modo-pip #avisos, body.modo-pip .fundo-modal, body.modo-pip .configuracoes { display: none !important; }
 .qr-celular { text-align: center; }
 .qr-celular .qr { width: 220px; max-width: 100%; margin: 4px auto 16px; }
 .qr-celular .qr svg { display: block; width: 100%; height: auto; border-radius: 8px; }

@@ -25,6 +25,31 @@ test('live continua visível durante atraso temporário de 30 s no sinal', () =>
   assert.equal(liveNoAr(null, agora), false);
 });
 
+test('o limitador usa o setTimeout do navegador sem "Illegal invocation" (isso derrubava a conexão de voz)', () => {
+  // No navegador, setTimeout/clearTimeout chamados como método de outro objeto lançam TypeError: Illegal invocation.
+  const original = { setTimeout: globalThis.setTimeout, clearTimeout: globalThis.clearTimeout };
+  const exigente = (fn) => function (...args) {
+    if (this !== undefined && this !== globalThis) throw new TypeError('Illegal invocation');
+    return fn(...args);
+  };
+  globalThis.setTimeout = exigente(original.setTimeout);
+  globalThis.clearTimeout = exigente(original.clearTimeout);
+  try {
+    const enviados = [];
+    const limitador = new LimitadorFala((f) => enviados.push(f));
+    assert.doesNotThrow(() => {
+      limitador.atualizar(true);
+      limitador.atualizar(false); // menos de 500 ms depois: agenda
+      limitador.atualizar(true); // volta ao enviado: cancela o agendado
+    });
+    limitador.parar();
+    assert.deepEqual(enviados, [true]);
+  } finally {
+    globalThis.setTimeout = original.setTimeout;
+    globalThis.clearTimeout = original.clearTimeout;
+  }
+});
+
 test('quem está falando: no máximo 2 mensagens por segundo, terminando no estado certo', () => {
   let t = 0;
   const enviados = [];

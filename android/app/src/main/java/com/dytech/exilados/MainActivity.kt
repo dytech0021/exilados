@@ -3,7 +3,10 @@ package com.dytech.exilados
 import android.Manifest
 import android.annotation.SuppressLint
 import android.app.Activity
+import android.app.PictureInPictureParams
 import android.content.ActivityNotFoundException
+import android.content.res.Configuration
+import android.util.Rational
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.net.Uri
@@ -36,6 +39,10 @@ class MainActivity : Activity() {
     private var aoSairDaTelaCheia: WebChromeClient.CustomViewCallback? = null
     private var escolhaDeArquivo: ValueCallback<Array<Uri>>? = null
     private var pedidoDoMicrofone: PermissionRequest? = null
+    /** A sala de voz em que a pessoa está (o site avisa), ou null fora da voz. */
+    private var salaDaVoz: String? = null
+    /** Há live ou tela compartilhada na tela (o site avisa): ao sair do app, ele vira janela flutuante. */
+    private var comVideo = false
     private val login by lazy { LoginGoogle(this) }
     private val atualizacao by lazy { AtualizacaoApp(this) }
 
@@ -86,6 +93,29 @@ class MainActivity : Activity() {
     override fun onPause() {
         atualizacao.aoSair()
         super.onPause()
+    }
+
+    // ---------- janela flutuante (live ou tela compartilhada enquanto se usa outros apps) ----------
+
+    private fun parametrosDaJanela(): PictureInPictureParams {
+        val construtor = PictureInPictureParams.Builder().setAspectRatio(Rational(16, 9))
+        // Do Android 12 em diante, o próprio sistema leva para a janela ao sair do app (com animação).
+        if (Build.VERSION.SDK_INT >= 31) construtor.setAutoEnterEnabled(comVideo).setSeamlessResizeEnabled(false)
+        return construtor.build()
+    }
+
+    override fun onUserLeaveHint() {
+        super.onUserLeaveHint()
+        if (comVideo && Build.VERSION.SDK_INT < 31) {
+            runCatching { enterPictureInPictureMode(parametrosDaJanela()) }
+        }
+    }
+
+    override fun onPictureInPictureModeChanged(naJanela: Boolean, configuracao: Configuration) {
+        super.onPictureInPictureModeChanged(naJanela, configuracao)
+        // Na janela, o site mostra só o vídeo; fora dela, a tela inteira de novo.
+        web.evaluateJavascript("window.exiladosJanelaFlutuante && window.exiladosJanelaFlutuante($naJanela)", null)
+        atualizacao.emJanelaFlutuante(naJanela)
     }
 
     @Deprecated("O botão voltar ainda chega aqui com o voltar preditivo desligado.")
@@ -145,7 +175,14 @@ class MainActivity : Activity() {
         if (codigo != PEDIDO_MICROFONE) return
         val pedido = pedidoDoMicrofone ?: return
         pedidoDoMicrofone = null
-        if (temMicrofone()) pedido.grant(arrayOf(PermissionRequest.RESOURCE_AUDIO_CAPTURE)) else pedido.deny()
+        if (temMicrofone()) {
+            pedido.grant(arrayOf(PermissionRequest.RESOURCE_AUDIO_CAPTURE))
+            // O site avisa "na voz" antes de o microfone ser liberado: o serviço subiu sem ele e, com a tela apagada, o
+            // Android mandaria silêncio. Sobe de novo, agora com o microfone.
+            salaDaVoz?.let { VozServico.iniciar(this, it, comMicrofone = true) }
+        } else {
+            pedido.deny()
+        }
     }
 
     @Deprecated("Escolha de arquivo pelo resultado da atividade (sem a biblioteca de compatibilidade).")
@@ -239,7 +276,14 @@ class MainActivity : Activity() {
     private inner class Ponte {
         @JavascriptInterface
         fun voz(ligada: Boolean, sala: String) = runOnUiThread {
+            salaDaVoz = if (ligada) sala else null
             if (ligada) VozServico.iniciar(this@MainActivity, sala, temMicrofone()) else VozServico.parar(this@MainActivity)
+        }
+
+        @JavascriptInterface
+        fun video(sim: Boolean) = runOnUiThread {
+            comVideo = sim
+            runCatching { setPictureInPictureParams(parametrosDaJanela()) }
         }
     }
 

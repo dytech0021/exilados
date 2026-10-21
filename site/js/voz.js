@@ -388,9 +388,14 @@ function montarEventos(LKC, room) {
       if (tela && pub.track === tela.video) pararTela().catch(() => {});
     })
     .on(E.ActiveSpeakersChanged, (quem) => {
-      estado.falandoNaSala = new Set(quem.map((p) => p.identity));
-      avisarQueFalo(!voz.mudo && !voz.surdo && estado.falandoNaSala.has(meuId()));
-      avisar('falando');
+      // Roda dentro da leitura da conexão do LiveKit: um erro aqui derrubaria a conexão de voz.
+      try {
+        estado.falandoNaSala = new Set(quem.map((p) => p.identity));
+        avisarQueFalo(!voz.mudo && !voz.surdo && estado.falandoNaSala.has(meuId()));
+        avisar('falando');
+      } catch (falha) {
+        console.error('Exilados: erro ao tratar quem está falando:', falha);
+      }
     })
     .on(E.Reconnecting, () => { voz.situacao = 'reconectando'; mudou(); })
     // A sinalização pode se reconectar enquanto o áudio continua; só marca queda se a mídia cair.

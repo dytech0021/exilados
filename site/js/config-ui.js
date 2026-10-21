@@ -6,6 +6,7 @@ import { formatarId, lerId, limparNome, ordenarPorNome } from './formato.js';
 import { conferirArquivo, LADO_PERFIL, reduzirImagem } from './imagens.js';
 import { abrirTransmitir, noPrograma, versaoDoPrograma } from './programa.js';
 import { COMMIT_SITE, VERSAO_SITE } from './versao.js';
+import { versaoDoApp } from './android.js';
 import { api, conferir, sb } from './supa.js';
 import { sair } from './auth.js';
 import {
@@ -388,19 +389,21 @@ export function abrirConfig(pagina) {
     if (pagina) mostrarPagina(pagina);
     return;
   }
+  const app = versaoDoApp(navigator.userAgent);
   const nav = el('nav', {},
+    // As versões no topo (ajudam a saber se a atualização já chegou).
+    el('div', { class: 'versoes' },
+      app ? el('small', { text: `App ${app} para Android` }) : null,
+      noPrograma ? el('small', { text: `Programa ${versaoDoPrograma} para Windows` }) : null,
+      el('small', { text: `Site ${VERSAO_SITE}${COMMIT_SITE ? ` (${COMMIT_SITE})` : ''}` })),
+    el('div', { class: 'separador' }),
     el('h4', { text: 'Configurações de usuário' }),
     ['conta', 'voz', 'transmitir'].map((p) => el('button', { dataset: { pagina: p }, text: PAGINAS[p].rotulo, onclick: () => mostrarPagina(p) })),
     souDono() ? [el('div', { class: 'separador' }), el('h4', { text: 'Grupo Exilados' }),
       ['salas', 'membros'].map((p) => el('button', { dataset: { pagina: p }, text: PAGINAS[p].rotulo, onclick: () => mostrarPagina(p) }))] : null,
     el('div', { class: 'separador' }),
     el('button', { text: 'Convidar pessoas', onclick: convidar }),
-    el('button', { class: 'perigo', text: 'Sair da conta', onclick: sairDaConta }),
-    el('div', { class: 'separador' }),
-    // Como o Discord, as versões ficam no fim da lista (ajudam a saber se a atualização já chegou).
-    el('div', { class: 'versoes' },
-      el('small', { text: `Site ${VERSAO_SITE}${COMMIT_SITE ? ` (${COMMIT_SITE})` : ''}` }),
-      noPrograma ? el('small', { text: `Programa ${versaoDoPrograma} para Windows` }) : null));
+    el('button', { class: 'perigo', text: 'Sair da conta', onclick: sairDaConta }));
   const paginaEl = el('div', { class: 'pagina' });
   const fechar = () => {
     aberta?.desfazer?.();

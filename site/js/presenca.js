@@ -45,7 +45,11 @@ export function liveNoAr(live, agoraServidor) {
  * Manda "falando / parou" no máximo a cada `intervalo` ms (2 por segundo), sempre terminando no estado certo.
  */
 export class LimitadorFala {
-  constructor(enviar, { intervalo = 500, agora = () => Date.now(), agendar = setTimeout, cancelar = clearTimeout } = {}) {
+  // setTimeout/clearTimeout embrulhados: guardados como método deste objeto, o navegador lançaria "Illegal invocation"
+  // (e o erro, vindo do aviso de quem fala, derrubava a conexão de voz).
+  constructor(enviar, {
+    intervalo = 500, agora = () => Date.now(), agendar = (fn, ms) => setTimeout(fn, ms), cancelar = (id) => clearTimeout(id),
+  } = {}) {
     this.enviar = enviar;
     this.intervalo = intervalo;
     this.agora = agora;

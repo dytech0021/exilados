@@ -66,6 +66,11 @@ class AtualizacaoApp(private val atividade: MainActivity) {
         principal.removeCallbacks(periodica)
     }
 
+    /** Na janela flutuante só aparece o vídeo: o aviso de versão nova volta ao sair dela. */
+    fun emJanelaFlutuante(ativa: Boolean) {
+        if (ativa) aviso.esconder() else mostrarAviso()
+    }
+
     /** A resposta ao pedido de notificação (para avisar "atualizado"): a instalação segue com ou sem ela. */
     fun aoResponderLicenca(codigo: Int): Boolean {
         if (codigo != PEDIDO_NOTIFICACAO) return false

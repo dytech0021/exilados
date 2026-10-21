@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { avisoDeVoz } from '../js/android.js';
+import { avisoDeVideo, avisoDeVoz, versaoDoApp } from '../js/android.js';
 
 function appFalso() {
   const chamadas = [];
@@ -16,6 +16,22 @@ test('o app do celular fica sabendo quando a pessoa entra, troca e sai da sala d
   avisar(false, 'Jogando');
   avisar(false, '');
   assert.deepEqual(app.chamadas, [[true, 'Geral'], [true, 'Jogando'], [false, '']]);
+});
+
+test('o app fica sabendo quando há vídeo na tela (live ou tela compartilhada), para a janela flutuante', () => {
+  const chamadas = [];
+  const avisar = avisoDeVideo({ video: (sim) => chamadas.push(sim) });
+  avisar('grupo');
+  avisar('live');
+  avisar('tela');
+  avisar('conversa');
+  avisar('amigos');
+  assert.deepEqual(chamadas, [false, true, false]);
+});
+
+test('a versão do app vem do agente do WebView', () => {
+  assert.equal(versaoDoApp('Mozilla/5.0 (Linux; Android 14; wv) Chrome/131 Mobile Safari/537.36 ExiladosAndroid/1.0.9'), '1.0.9');
+  assert.equal(versaoDoApp('Mozilla/5.0 (Linux; Android 14) Chrome/131 Mobile Safari/537.36'), null);
 });
 
 test('fora do app (navegador) não faz nada', () => {

@@ -23,7 +23,9 @@ import { fecharTela, montarTela } from './tela.js';
 import {
   avatar, aviso, botaoIcone, confirmar, el, icone, janela, limpar,
 } from './ui.js';
-import { avisoDeVoz, ENDERECO_APK, noApp } from './android.js';
+import {
+  avisoDeVideo, avisoDeVoz, ENDERECO_APK, noApp,
+} from './android.js';
 import { svgDoQr } from './qr.js';
 import * as voz from './voz.js';
 
@@ -292,6 +294,10 @@ async function abrirApp() {
   // No app do celular: na sala de voz, o app mantém a voz com a tela apagada (notificação "Na sala de voz").
   const avisarApp = avisoDeVoz(window.ExiladosAndroid);
   ouvir('voz', () => avisarApp(voz.voz.situacao !== 'desligada', voz.voz.sala ? nomeDaSala(voz.voz.sala) : ''));
+  // Com live ou tela compartilhada na tela, o app vira janela flutuante ao sair dele; nela, só o vídeo aparece.
+  const avisarVideo = avisoDeVideo(window.ExiladosAndroid);
+  ouvir('vista', () => avisarVideo(estado.vista?.tipo));
+  window.exiladosJanelaFlutuante = (ligada) => document.body.classList.toggle('modo-pip', Boolean(ligada));
   acompanhar();
   gestos();
   ouvir('vista', () => { if (estado.vista.tipo === 'conversa' || estado.vista.tipo === 'grupo') vistaAnterior = { ...estado.vista }; });
