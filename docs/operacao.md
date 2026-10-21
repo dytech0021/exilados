@@ -49,8 +49,9 @@ atualização: guarde a senha num gerenciador de senhas.
 ### 2.3 App Android
 
 1. Suba `versionCode` (de um em um) e `versionName` (a mesma versão do programa) em `android/app/build.gradle.kts`.
-2. `.\android\gerar-apk.ps1` (testes, análise, compilação e assinatura; o APK fica em `pronto\Exilados.apk`).
-3. `.\android\publicar-apk.ps1` (envia ao servidor).
+2. `.\android\gerar-apk.ps1` (testes, análise, compilação e assinatura; o APK e o `android.json` ficam em `pronto\`).
+3. `.\android\publicar-apk.ps1` (envia o APK e depois o `android.json`; os apps instalados se atualizam sozinhos: ao
+   abrir e a cada 30 minutos procuram, baixam, conferem a assinatura e mostram "Nova versão do Exilados").
 4. Versão no GitHub com os dois arquivos: `gh release create vX.Y.Z -R dytech0021/exilados pronto\Exilados.exe pronto\Exilados.apk`
    (o `.exe` publicado fica em `%TEMP%\exilados-windows-publicar\Exilados.exe`).
 
