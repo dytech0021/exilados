@@ -14,6 +14,7 @@ import { api } from './supa.js';
 import { opcoesPublicacaoTela, qualidadeRecebida } from './qualidade-tela.js';
 import { conectarFiltroRuido } from './filtro-ruido.js';
 import { montagemDaVoz, restricaoDoMicrofone } from './montagem-voz.js';
+import { volumeNaFaixa } from './volume.js';
 import { faltaSomDaTela } from './som-tela.js';
 import { aviso, confirmar } from './ui.js';
 
@@ -34,8 +35,9 @@ export const QUALIDADE_PADRAO = '1080p30';
 export const ANDROID = typeof navigator !== 'undefined' && /Android/i.test(navigator.userAgent);
 const CELULAR = typeof navigator !== 'undefined' && /Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
 const PROGRAMA = typeof window !== 'undefined' && Boolean(window.exiladosPrograma);
-// No EXE e no celular, a voz toca diretamente no <audio>, preservando a saída normal do aparelho.
-export const VOLUME_MAXIMO = ANDROID || PROGRAMA ? 100 : 200;
+// No EXE e no celular, a voz toca diretamente no <audio>, preservando a saída normal do aparelho. No EXE, acima de
+// 100% a voz passa por um reforço (volume.js); no celular o som vai pelo canal de chamada e fica em até 100%.
+export const VOLUME_MAXIMO = ANDROID ? 100 : 200;
 estado.falandoNaSala = new Set();
 
 let LK = null;
@@ -58,7 +60,13 @@ export function preferencias() {
     prefs.volumeSaida ??= 100;
     prefs.cancelamentoRuido ??= false;
     prefs.ruidoForte ??= ANDROID;
-    prefs.portaDeVoz ??= !ANDROID;
+    prefs.portaDeVoz ??= false;
+    if (!prefs.porta1021) {
+      // A porta de voz cortava a fala (ficou ruim no teste): desligada para todos uma vez; quem quiser, liga de novo.
+      prefs.portaDeVoz = false;
+      prefs.porta1021 = true;
+      try { localStorage.setItem(chavePrefs(), JSON.stringify(prefs)); } catch { /* sem armazenamento */ }
+    }
     if (!prefs.padroes1020) {
       // Uma vez para todos: o RNNoise deixava a voz robótica e abafada, e o microfone e a saída voltam ao padrão do
       // Windows (o aparelho escolhido antes podia ser outro). Depois, o que a pessoa escolher continua valendo.
@@ -109,8 +117,29 @@ export function volumeEfetivo(id) {
 function aplicarVolume(id) {
   const participante = sala?.remoteParticipants.get(id);
   if (!participante) return;
-  participante.setVolume(voz.surdo ? 0 : volumeEfetivo(id));
-  participante.setVolume(voz.surdo ? 0 : volumeDaTelaEfetivo(), LK.Track.Source.ScreenShareAudio);
+  const daVoz = voz.surdo ? 0 : volumeEfetivo(id);
+  const daTela = voz.surdo ? 0 : volumeDaTelaEfetivo();
+  if (!PROGRAMA) {
+    participante.setVolume(daVoz);
+    participante.setVolume(daTela, LK.Track.Source.ScreenShareAudio);
+    return;
+  }
+  // No programa o som toca direto no <audio> (até 100%); acima disso a faixa passa pelo reforço.
+  for (const pub of participante.audioTrackPublications.values()) {
+    if (!pub.track) continue;
+    volumeNaFaixa(pub.track, pub.source === LK.Track.Source.ScreenShareAudio ? daTela : daVoz, contextoDoReforco);
+  }
+}
+
+// Um AudioContext só para as vozes acima de 100% no programa, tocando na saída escolhida (ou na padrão).
+let reforco = null;
+function contextoDoReforco() {
+  if (!reforco) {
+    reforco = new AudioContext();
+    const saida = preferencias().saida;
+    if (saida && reforco.setSinkId) reforco.setSinkId(saida).catch(() => {});
+  }
+  return reforco;
 }
 
 /** Volume de saída geral (todos da sala), de 0 ao máximo do aparelho. */
@@ -363,6 +392,8 @@ function soltarTela() {
 
 function limpar() {
   for (const faixa of [...elementos.keys()]) desanexar(faixa);
+  reforco?.close().catch(() => {});
+  reforco = null;
   fecharMicrofone(microfone);
   microfone = null;
   soltarTela();
@@ -801,6 +832,8 @@ export async function definirSaida(id) {
   preferencias().saida = id || null;
   guardar();
   if (sala) await sala.switchActiveDevice('audiooutput', id || 'default');
+  // As vozes acima de 100% no programa tocam pelo reforço, que troca de saída à parte.
+  if (reforco?.setSinkId) await reforco.setSinkId(id || '').catch(() => {});
 }
 
 export function definirVolumeEntrada(porcento) {
