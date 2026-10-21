@@ -37,6 +37,7 @@ class MainActivity : Activity() {
     private var escolhaDeArquivo: ValueCallback<Array<Uri>>? = null
     private var pedidoDoMicrofone: PermissionRequest? = null
     private val login by lazy { LoginGoogle(this) }
+    private val atualizacao by lazy { AtualizacaoApp(this) }
 
     @SuppressLint("SetJavaScriptEnabled")
     override fun onCreate(estado: Bundle?) {
@@ -77,6 +78,15 @@ class MainActivity : Activity() {
     }
 
     // A página não é pausada ao sair da tela (sem web.onPause): a voz e as lives seguem com a tela apagada.
+    override fun onResume() {
+        super.onResume()
+        atualizacao.aoVoltar()
+    }
+
+    override fun onPause() {
+        atualizacao.aoSair()
+        super.onPause()
+    }
 
     @Deprecated("O botão voltar ainda chega aqui com o voltar preditivo desligado.")
     override fun onBackPressed() {
@@ -131,6 +141,7 @@ class MainActivity : Activity() {
 
     override fun onRequestPermissionsResult(codigo: Int, permissoes: Array<out String>, resultados: IntArray) {
         super.onRequestPermissionsResult(codigo, permissoes, resultados)
+        if (atualizacao.aoResponderLicenca(codigo)) return
         if (codigo != PEDIDO_MICROFONE) return
         val pedido = pedidoDoMicrofone ?: return
         pedidoDoMicrofone = null
@@ -187,7 +198,8 @@ class MainActivity : Activity() {
     private inner class Janelas : WebChromeClient() {
         override fun onPermissionRequest(pedido: PermissionRequest) = runOnUiThread {
             val audio = PermissionRequest.RESOURCE_AUDIO_CAPTURE
-            if (!Enderecos.doSite(pedido.origin.toString()) || audio !in pedido.resources) {
+            // pedido.origin é só a origem (https://filabox3d.com.br/), sem o caminho do site.
+            if (!Enderecos.origemDoSite(pedido.origin.toString()) || audio !in pedido.resources) {
                 pedido.deny()
             } else if (temMicrofone()) {
                 pedido.grant(arrayOf(audio))

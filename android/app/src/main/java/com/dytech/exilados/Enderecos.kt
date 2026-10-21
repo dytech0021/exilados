@@ -26,6 +26,12 @@ object Enderecos {
             (caminho == "/exilados" || caminho.startsWith("/exilados/"))
     }
 
+    /** A origem (só esquema e domínio, como o Android entrega nos pedidos de microfone) é a do site do Exilados. */
+    fun origemDoSite(origem: String): Boolean {
+        val u = try { URI(origem) } catch (e: Exception) { return false }
+        return u.scheme.equals("https", true) && u.host.equals("filabox3d.com.br", true) && (u.port == -1 || u.port == 443)
+    }
+
     /** O site pediu o login do Google: o mesmo pedido, voltando para a porta do celular, e para onde o site queria voltar. */
     fun loginGoogle(url: String): Login? {
         if (!url.startsWith("$SUPABASE/auth/v1/authorize?")) return null

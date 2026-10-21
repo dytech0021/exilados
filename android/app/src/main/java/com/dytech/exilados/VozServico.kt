@@ -24,6 +24,7 @@ class VozServico : Service() {
     override fun onBind(intent: Intent?): IBinder? = null
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
+        ativo = true
         val sala = intent?.getStringExtra(EXTRA_SALA).orEmpty()
         val comMicrofone = intent?.getBooleanExtra(EXTRA_MICROFONE, false) ?: false
         val gerente = getSystemService(NotificationManager::class.java)
@@ -64,12 +65,16 @@ class VozServico : Service() {
     }
 
     override fun onDestroy() {
+        ativo = false
         processador?.let { if (it.isHeld) it.release() }
         wifi?.let { if (it.isHeld) it.release() }
         super.onDestroy()
     }
 
     companion object {
+        /** A pessoa está numa sala de voz (a atualização pergunta antes de fechar o app). */
+        @Volatile var ativo = false
+            private set
         private const val CANAL = "voz"
         private const val NOTIFICACAO = 1
         private const val EXTRA_SALA = "sala"

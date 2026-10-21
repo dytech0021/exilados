@@ -12,8 +12,8 @@ android {
         minSdk = 26
         targetSdk = 35
         // A cada APK publicado: versionCode sobe de um em um; versionName acompanha a versão do programa do Windows.
-        versionCode = 1
-        versionName = "1.0.7"
+        versionCode = 2
+        versionName = "1.0.8"
     }
 
     // A chave que assina o APK fica fora do repositório (ele é público): gerar-apk.ps1 passa o arquivo e a senha

@@ -19,6 +19,16 @@ class EnderecosTest {
     }
 
     @Test
+    fun oMicrofoneSoELiberadoParaAOrigemDoSite() {
+        // O Android entrega só a origem (sem o caminho /exilados) no pedido de microfone.
+        assertTrue(Enderecos.origemDoSite("https://filabox3d.com.br/"))
+        assertTrue(Enderecos.origemDoSite("https://filabox3d.com.br"))
+        assertFalse(Enderecos.origemDoSite("http://filabox3d.com.br/"))
+        assertFalse(Enderecos.origemDoSite("https://exemplo.com/"))
+        assertFalse(Enderecos.origemDoSite("https://filabox3d.com.br.exemplo.com/"))
+    }
+
+    @Test
     fun loginDoGoogleVaiPeloNavegadorVoltandoParaAPortaDoCelular() {
         val pedido = "https://kobtvgqnitdeviddvymm.supabase.co/auth/v1/authorize?provider=google" +
             "&redirect_to=https%3A%2F%2Ffilabox3d.com.br%2Fexilados%2F%3Fx%3D1&code_challenge=abc123&code_challenge_method=s256"

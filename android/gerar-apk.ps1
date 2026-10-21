@@ -68,6 +68,14 @@ try {
     New-Item -ItemType Directory -Force $pronto | Out-Null
     Copy-Item $apk (Join-Path $pronto 'Exilados.apk') -Force
     $tamanho = (Get-Item $apk).Length
+    # O aviso de versão que os apps instalados leem para se atualizar (o APK em si é conferido pela assinatura).
+    $aviso = [ordered]@{
+        versionCode = [int]$metadata.elements[0].versionCode
+        versionName = $versao
+        size = $tamanho
+        sha256 = (Get-FileHash $apk -Algorithm SHA256).Hash.ToLowerInvariant()
+    } | ConvertTo-Json -Compress
+    [IO.File]::WriteAllText((Join-Path $pronto 'android.json'), $aviso, [Text.UTF8Encoding]::new($false))
     Write-Host "Exilados para Android $versao em pronto\Exilados.apk ($tamanho bytes). Certificado SHA-256: $digital" -ForegroundColor Green
 }
 finally {
