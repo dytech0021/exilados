@@ -104,6 +104,14 @@ async function paginaVoz(secao) {
   const cancelamentoRuido = el('input', { type: 'checkbox', checked: p.cancelamentoRuido, attrs: { 'aria-label': 'Cancelamento de ruído do microfone' } });
   const ruidoForte = el('input', { type: 'checkbox', checked: p.ruidoForte, attrs: { 'aria-label': 'Filtragem forte do microfone' } });
   ruidoForte.disabled = !p.cancelamentoRuido;
+  const portaDeVoz = el('input', { type: 'checkbox', checked: p.portaDeVoz, attrs: { 'aria-label': 'Porta de voz' } });
+  portaDeVoz.disabled = p.cancelamentoRuido;
+  portaDeVoz.addEventListener('change', async () => {
+    portaDeVoz.disabled = true;
+    try { await voz.definirPortaDeVoz(portaDeVoz.checked); }
+    catch (falha) { portaDeVoz.checked = !portaDeVoz.checked; erro(falha); }
+    finally { portaDeVoz.disabled = cancelamentoRuido.checked; }
+  });
   const volumeSaida = el('input', {
     type: 'range', class: 'faixa-config', min: 0, max: voz.VOLUME_MAXIMO, value: Math.min(p.volumeSaida, voz.VOLUME_MAXIMO),
     attrs: { 'aria-label': 'Volume de saída' },
@@ -123,10 +131,10 @@ async function paginaVoz(secao) {
     const { entradas, saidas, semNomes } = await voz.listarDispositivos();
     const opcao = (d, i, tipo) => el('option', { value: d.deviceId, text: tipo === 'Microfone' ? voz.nomeDoAparelho(d, i) : (d.label || `${tipo} ${i + 1}`) });
     limpar(entrada, el('option', { value: '', text: voz.ANDROID ? 'Automático (fone, se houver)' : 'Padrão do sistema' }),
-      entradas.filter((d) => d.deviceId !== 'default').map((d, i) => opcao(d, i, 'Microfone')));
+      entradas.filter((d) => d.deviceId !== 'default' && d.deviceId !== 'communications').map((d, i) => opcao(d, i, 'Microfone')));
     entrada.value = entradas.some((d) => d.deviceId === p.entrada) ? p.entrada : '';
     if (voz.saidaDisponivel()) {
-      limpar(saida, el('option', { value: '', text: 'Padrão do sistema' }), saidas.filter((d) => d.deviceId !== 'default').map((d, i) => opcao(d, i, 'Saída')));
+      limpar(saida, el('option', { value: '', text: 'Padrão do sistema' }), saidas.filter((d) => d.deviceId !== 'default' && d.deviceId !== 'communications').map((d, i) => opcao(d, i, 'Saída')));
       saida.value = saidas.some((d) => d.deviceId === p.saida) ? p.saida : '';
     } else {
       limpar(saida, el('option', { text: voz.ANDROID ? 'A mesma do microfone escolhido' : 'Segue a saída do sistema' }));
@@ -158,7 +166,7 @@ async function paginaVoz(secao) {
     cancelamentoRuido.disabled = true;
     try { await voz.definirCancelamentoRuido(cancelamentoRuido.checked); }
     catch (falha) { cancelamentoRuido.checked = !cancelamentoRuido.checked; erro(falha); }
-    finally { cancelamentoRuido.disabled = false; ruidoForte.disabled = !cancelamentoRuido.checked; }
+    finally { cancelamentoRuido.disabled = false; ruidoForte.disabled = !cancelamentoRuido.checked; portaDeVoz.disabled = cancelamentoRuido.checked; }
   });
   ruidoForte.addEventListener('change', async () => {
     ruidoForte.disabled = true;
@@ -196,6 +204,8 @@ async function paginaVoz(secao) {
     el('p', { class: 'ajuda', text: 'Fale algo: a barra mostra o que o microfone capta (com o volume de entrada acima).' }),
     botaoTeste, medidor,
     el('h3', { text: 'Processamento' }),
+    voz.ANDROID ? null : el('label', { class: 'opcao-voz' }, portaDeVoz, el('span', { text: 'Só mandar som quando eu estiver falando (porta de voz)' })),
+    voz.ANDROID ? null : el('p', { class: 'ajuda', text: 'Entre as falas, o microfone fica fechado: o som do jogo ou do vídeo que vaza do fone para o microfone não vai para a sala. A voz passa como é, sem filtro.' }),
     el('label', { class: 'opcao-voz' }, cancelamentoRuido, el('span', { text: 'Cancelamento de ruído do microfone' })),
     el('label', { class: 'opcao-voz' }, ruidoForte, el('span', { text: 'Filtragem forte para sons distantes' })),
     el('p', { class: 'ajuda', text: 'O cancelamento de ruído vem desligado: ele tira barulhos fortes de fundo, mas deixa a voz robótica e abafada. Ligue só se houver muito barulho onde você está. A filtragem forte reduz o som de fundo entre as falas; se sua voz ficar cortada, desligue a filtragem forte. A redução de ruído e o cancelamento de eco do navegador continuam ativos. O volume de cada pessoa se ajusta com o botão direito no nome dela (ou segurando, no celular).' }));

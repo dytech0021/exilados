@@ -1,6 +1,17 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { montagemDaVoz } from '../js/montagem-voz.js';
+import { montagemDaVoz, restricaoDoMicrofone } from '../js/montagem-voz.js';
+
+test('no Windows, sem escolha, o microfone é o de comunicação do Windows (o que ele usa em chamadas)', () => {
+  assert.deepEqual(restricaoDoMicrofone({ entrada: null, windows: true }), { ideal: 'communications' });
+  assert.deepEqual(restricaoDoMicrofone({ entrada: 'default', windows: true }), { ideal: 'communications' });
+});
+
+test('microfone escolhido é exigido; fora do Windows, sem escolha, o navegador decide', () => {
+  assert.deepEqual(restricaoDoMicrofone({ entrada: 'abc123', windows: true }), { exact: 'abc123' });
+  assert.deepEqual(restricaoDoMicrofone({ entrada: 'abc123', windows: false }), { exact: 'abc123' });
+  assert.equal(restricaoDoMicrofone({ entrada: null, windows: false }), undefined);
+});
 
 test('no computador a voz passa pelo tratamento (compressor, reforço e limitador)', () => {
   assert.deepEqual(montagemDaVoz({ android: false, cancelamentoRuido: false, volumeEntrada: 100 }), { direto: false, tratamento: true });

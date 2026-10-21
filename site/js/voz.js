@@ -13,7 +13,7 @@ import { avisar, estado, meuId } from './estado.js';
 import { api } from './supa.js';
 import { opcoesPublicacaoTela, qualidadeRecebida } from './qualidade-tela.js';
 import { conectarFiltroRuido } from './filtro-ruido.js';
-import { montagemDaVoz } from './montagem-voz.js';
+import { montagemDaVoz, restricaoDoMicrofone } from './montagem-voz.js';
 import { faltaSomDaTela } from './som-tela.js';
 import { aviso, confirmar } from './ui.js';
 
@@ -58,6 +58,7 @@ export function preferencias() {
     prefs.volumeSaida ??= 100;
     prefs.cancelamentoRuido ??= false;
     prefs.ruidoForte ??= ANDROID;
+    prefs.portaDeVoz ??= !ANDROID;
     if (!prefs.padroes1020) {
       // Uma vez para todos: o RNNoise deixava a voz robótica e abafada, e o microfone e a saída voltam ao padrão do
       // Windows (o aparelho escolhido antes podia ser outro). Depois, o que a pessoa escolher continua valendo.
@@ -148,7 +149,7 @@ function carregarLiveKit() {
 }
 
 const restricoes = (deviceId, ruidoForte = false) => ({
-  deviceId: deviceId && deviceId !== 'default' ? { exact: deviceId } : undefined,
+  deviceId: restricaoDoMicrofone({ entrada: deviceId, windows: /Windows/i.test(navigator.userAgent) }),
   echoCancellation: true,
   noiseSuppression: true,
   // No celular, o ganho automático pode amplificar a TV/ambiente entre as falas.
@@ -205,11 +206,14 @@ async function abrirMicrofone() {
   try { ctx = new AudioContext({ sampleRate: 48000 }); } catch { ctx = new AudioContext(); }
   const fonte = ctx.createMediaStreamSource(bruto);
   let filtroRuido = null;
-  if (p.cancelamentoRuido && ctx.sampleRate === 48000 && ctx.audioWorklet && typeof AudioWorkletNode !== 'undefined') {
+  // Porta de voz (no computador): o RNNoise só detecta a fala, e o som original passa só enquanto a pessoa fala; entre
+  // as falas, o jogo que vaza do fone para o microfone não vai para a sala. Com o cancelamento de ruído ligado, vale ele.
+  const porta = p.portaDeVoz && !p.cancelamentoRuido && !ANDROID;
+  if ((p.cancelamentoRuido || porta) && ctx.sampleRate === 48000 && ctx.audioWorklet && typeof AudioWorkletNode !== 'undefined') {
     try {
       await ctx.audioWorklet.addModule(new URL('../vendor/noise-worklet.js', import.meta.url));
       filtroRuido = new AudioWorkletNode(ctx, 'exilados-cancelamento-ruido', {
-        processorOptions: { limiarVoz: ruidoForte ? 0.02 : 0 },
+        processorOptions: porta ? { porta: true } : { limiarVoz: ruidoForte ? 0.02 : 0 },
       });
     } catch (falha) {
       console.warn('Exilados: RNNoise indisponível, usando a redução do navegador:', falha);
@@ -840,6 +844,22 @@ export async function definirRuidoForte(ligado) {
     await definirEntrada(p.entrada);
   } catch (falha) {
     p.ruidoForte = anterior;
+    guardar();
+    throw falha;
+  }
+}
+
+/** Porta de voz (no computador): o microfone só manda som enquanto a pessoa fala. Troca na hora, na sala. */
+export async function definirPortaDeVoz(ligada) {
+  const p = preferencias();
+  const anterior = p.portaDeVoz;
+  p.portaDeVoz = Boolean(ligada);
+  guardar();
+  if (!microfone?.trilha || p.cancelamentoRuido) return;
+  try {
+    await definirEntrada(p.entrada);
+  } catch (falha) {
+    p.portaDeVoz = anterior;
     guardar();
     throw falha;
   }
