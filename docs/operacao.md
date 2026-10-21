@@ -11,6 +11,7 @@ Como o Exilados está montado, como publicar cada parte e como conferir que est�
 | LiveKit (voz) | `127.0.0.1:7880` (pelo nginx em `/exilados/rtc`), UDP 7882 e TCP 7881 públicas | `/opt/livekit/1.13.7`, serviço `exilados-livekit`. |
 | MediaMTX (lives) | RTSPS 8322 (envio), WebRTC 8189 (assistir), WHEP pelo nginx em `/exilados/ao-vivo/` | Configuração em `servidor/mediamtx/mediamtx.yml`. |
 | Programa do Windows | `https://filabox3d.com.br/exilados/atualizacao/` (`Exilados.exe`, `manifest.json` e o pacote do FFmpeg) | Publicado por `windows/publicar.ps1`. |
+| App Android | `https://filabox3d.com.br/exilados/atualizacao/Exilados.apk` (QR code no programa do Windows, botão de baixar no navegador do Android) | Gerado por `android/gerar-apk.ps1`, publicado por `android/publicar-apk.ps1`. |
 | Banco | Supabase do FilaBox (`kobtvgqnitdeviddvymm`), tabelas `exilados_*` e pasta `exilados` | `banco/001_exilados.sql`. |
 
 Servidor: Ubuntu 24.04 (177.153.35.193), o mesmo do FilaBox e do relay do Ponte. Acesso como root com a chave
@@ -36,15 +37,32 @@ mudança não passar na conferência. O MediaMTX só é mexido sem live no ar (o
 1. Suba `<Version>` em `windows/Exilados.csproj`.
 2. `.\windows\publicar.ps1`
 
-Ele compila (arquivo único), assina com a chave de atualização e envia. Os programas instalados encontram a versão
-nova ao abrir e a cada 6 horas, e trocam de executável só sem live no ar.
+Ele compila (arquivo único), assina com a chave de atualização e envia. Os programas instalados instalam a versão
+nova ao abrir; abertos, procuram a cada hora e mostram a setinha verde (clicar reinicia na nova). Sem clique, a troca
+acontece ao fechar ou reabrir a janela, nunca com live no ar ou na voz.
 
 **Chave de atualização:** `OneDrive\Exilados\chave-atualizacao.exk`, cifrada com a senha do dono (PBKDF2 com
 600.000 rodadas e AES-GCM). Neste PC a senha fica protegida pelo Windows em `%APPDATA%\Exilados-publicar\senha.dpapi`;
 em outro PC, o `publicar.ps1` pede a senha e oferece guardar. Sem a chave, nenhuma cópia instalada aceita
 atualização: guarde a senha num gerenciador de senhas.
 
-### 2.3 Banco
+### 2.3 App Android
+
+1. Suba `versionCode` (de um em um) e `versionName` (a mesma versão do programa) em `android/app/build.gradle.kts`.
+2. `.\android\gerar-apk.ps1` (testes, análise, compilação e assinatura; o APK fica em `pronto\Exilados.apk`).
+3. `.\android\publicar-apk.ps1` (envia ao servidor).
+4. Versão no GitHub com os dois arquivos: `gh release create vX.Y.Z -R dytech0021/exilados pronto\Exilados.exe pronto\Exilados.apk`
+   (o `.exe` publicado fica em `%TEMP%\exilados-windows-publicar\Exilados.exe`).
+
+O app é o site dentro de um WebView (`android/`), como o programa do Windows. O login com Google vai pelo navegador do
+celular e volta para `http://127.0.0.1:53682/exilados`, o mesmo endereço do programa, já autorizado no Supabase. Na
+sala de voz, um serviço com a notificação "Na sala de voz" mantém a voz com a tela apagada.
+
+**Chave do APK:** `OneDrive\Exilados\exilados-android.jks` (criada pelo `gerar-apk.ps1` na primeira vez), com a mesma
+senha da chave de atualização do programa. Sem ela, o Android não instala versões novas por cima: quem tiver o app
+teria de desinstalar e instalar de novo.
+
+### 2.4 Banco
 
 Mudanças no banco vão em arquivos novos em `banco/` (`003_...sql`), aplicados pelo editor de SQL do Supabase, cada
 um com o seu teste (`testes.sql` para o `001`, `testes_002.sql` para o `002`). Os testes usam contas simuladas e desfazem
@@ -102,4 +120,6 @@ Registros do programa: `%APPDATA%\Exilados\sessoes.txt` (início, fim e quedas d
 | iPhone: a voz para ao trocar de aplicativo ou apagar a tela | Limite do Safari; volta ao abrir o site. |
 | Som da tela compartilhada pelo site | No Windows o Chrome/Edge manda o som do sistema todo (outros programas também); o site pede para deixar de fora o som da própria sala, o que os navegadores atuais respeitam. Se alguém ouvir o próprio eco, desmarque o som ao compartilhar. Para mandar só o som do jogo, use o programa do Windows. |
 | Rede que bloqueia UDP | A voz usa o TCP 7881 e as lives o TCP 8189 sozinhas. Sem TURN nesta versão. |
+| Voz robótica/abafada | O cancelamento de ruído (RNNoise) estragava a voz e vem desligado desde 20/10; no Android a voz sai direto do microfone (sem o tratamento do computador). Se voltar, conferir em Configurações → Voz e áudio se alguém ligou o cancelamento. |
+| Conexão de voz que cai e volta a cada poucos segundos | Visto em 20/10 (motivo "RR_SIGNAL_DISCONNECTED" no LiveKit, a conexão de controle pelo nginx fechando sozinha), em rajadas, nos dois programas da ligação; causa ainda não achada. `journalctl -u exilados-livekit \| grep resuming` mostra quando acontece. |
 | `MissingPartition` no canal de presença | O Supabase cria as partições de `realtime.messages` sozinho; na primeira vez pode falhar uma vez. |
