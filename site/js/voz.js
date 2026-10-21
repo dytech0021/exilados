@@ -13,6 +13,7 @@ import { avisar, estado, meuId } from './estado.js';
 import { api } from './supa.js';
 import { opcoesPublicacaoTela, qualidadeRecebida } from './qualidade-tela.js';
 import { conectarFiltroRuido } from './filtro-ruido.js';
+import { montagemDaVoz } from './montagem-voz.js';
 import { faltaSomDaTela } from './som-tela.js';
 import { aviso, confirmar } from './ui.js';
 
@@ -237,15 +238,23 @@ async function abrirMicrofone() {
   analisador.fftSize = 512;
   const destino = ctx.createMediaStreamDestination();
   const desligarFiltroRuido = conectarFiltroRuido(fonte, filtroRuido, ganho);
-  ganho.connect(compressor);
-  compressor.connect(reforco);
-  reforco.connect(limitador);
-  limitador.connect(analisador);
-  limitador.connect(destino);
+  const montagem = montagemDaVoz({ android: ANDROID, cancelamentoRuido: p.cancelamentoRuido, volumeEntrada: p.volumeEntrada });
+  let ultimo = ganho;
+  if (montagem.tratamento) {
+    ganho.connect(compressor);
+    compressor.connect(reforco);
+    reforco.connect(limitador);
+    ultimo = limitador;
+  }
+  ultimo.connect(analisador);
+  // Direto: publica a faixa do próprio microfone; o Web Audio fica só medindo quem fala (o destino mantém o
+  // medidor andando, sem tocar nada).
+  if (montagem.direto) analisador.connect(destino);
+  else ultimo.connect(destino);
   if (ctx.state === 'suspended') await ctx.resume().catch(() => {});
   return {
-    bruto, ctx, ganho, analisador, filtroRuido, desligarFiltroRuido,
-    faixa: destino.stream.getAudioTracks()[0],
+    bruto, ctx, ganho, analisador, filtroRuido, desligarFiltroRuido, direto: montagem.direto,
+    faixa: montagem.direto ? pista : destino.stream.getAudioTracks()[0],
     aparelho: pista?.getSettings?.().deviceId || '',
     nome: nomeDoAparelho({ label: pista?.label, deviceId: pista?.getSettings?.().deviceId }),
   };
@@ -786,9 +795,17 @@ export async function definirSaida(id) {
 }
 
 export function definirVolumeEntrada(porcento) {
-  preferencias().volumeEntrada = Math.max(0, Math.min(200, Math.round(porcento)));
+  const p = preferencias();
+  p.volumeEntrada = Math.max(0, Math.min(200, Math.round(porcento)));
   guardar();
-  if (microfone) microfone.ganho.gain.setTargetAtTime(prefs.volumeEntrada / 100, microfone.ctx.currentTime, 0.05);
+  if (!microfone) return;
+  // No Android a voz sai direto só em 100%: sair de 100% (ou voltar a ele) refaz o microfone na montagem certa.
+  const direto = montagemDaVoz({ android: ANDROID, cancelamentoRuido: p.cancelamentoRuido, volumeEntrada: p.volumeEntrada }).direto;
+  if (direto !== Boolean(microfone.direto)) {
+    definirEntrada(p.entrada).catch((falha) => console.warn('Exilados: não deu para refazer o microfone:', falha));
+    return;
+  }
+  microfone.ganho.gain.setTargetAtTime(p.volumeEntrada / 100, microfone.ctx.currentTime, 0.05);
 }
 
 /** Troca o filtro de ruído na hora, mantendo a publicação de voz na sala. */
