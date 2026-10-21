@@ -21,8 +21,10 @@ import {
 import { conferir, sb } from './supa.js';
 import { fecharTela, montarTela } from './tela.js';
 import {
-  avatar, aviso, botaoIcone, confirmar, el, icone, limpar,
+  avatar, aviso, botaoIcone, confirmar, el, icone, janela, limpar,
 } from './ui.js';
+import { avisoDeVoz, ENDERECO_APK, noApp } from './android.js';
+import { svgDoQr } from './qr.js';
 import * as voz from './voz.js';
 
 const $ = (id) => document.getElementById(id);
@@ -287,6 +289,9 @@ async function abrirApp() {
   iniciarGrupo(nav, partes);
   iniciarAmigos(nav, partes);
   quandoClicarNoAutor((id, x, y) => cartaoPerfil(id, x, y));
+  // No app do celular: na sala de voz, o app mantém a voz com a tela apagada (notificação "Na sala de voz").
+  const avisarApp = avisoDeVoz(window.ExiladosAndroid);
+  ouvir('voz', () => avisarApp(voz.voz.situacao !== 'desligada', voz.voz.sala ? nomeDaSala(voz.voz.sala) : ''));
   acompanhar();
   gestos();
   ouvir('vista', () => { if (estado.vista.tipo === 'conversa' || estado.vista.tipo === 'grupo') vistaAnterior = { ...estado.vista }; });
@@ -299,21 +304,49 @@ async function abrirApp() {
 const ocupado = () => voz.voz.situacao !== 'desligada' || assistindo(estado.vista?.tipo) || haLivesAbertas();
 
 /**
- * Botão de baixar o programa no trilho (como o "Baixar aplicativos" do Discord): só no Windows e fora do próprio
- * programa. Dentro do programa, o mesmo lugar mostra a setinha verde de atualização pronta (como a do Discord).
+ * Botão de baixar no trilho (como o "Baixar aplicativos" do Discord): o programa no navegador do Windows e o app no
+ * navegador do Android. Dentro do programa, o mesmo lugar mostra a setinha verde de atualização pronta (como a do
+ * Discord), e outro botão mostra o QR code para baixar o app no celular. Dentro do app, nada.
  */
 function botaoBaixar() {
-  if (noPrograma) return setinhaAtualizacao();
+  if (noPrograma) {
+    botaoCelular();
+    return setinhaAtualizacao();
+  }
+  if (noApp) return;
+  const android = /Android/i.test(navigator.userAgent);
   const windows = navigator.userAgentData?.platform === 'Windows' || /Windows NT/.test(navigator.userAgent);
-  if (!windows) return;
+  if (!windows && !android) return;
   $('trilho-baixar').hidden = false;
   $('trilho-baixar-separador').hidden = false;
   const botao = $('baixar-programa');
-  botao.href = `${BASE}atualizacao/Exilados.exe`;
+  const rotulo = android ? 'Baixar o app do Exilados para Android' : 'Baixar o Exilados para Windows';
+  botao.href = android ? `${BASE}atualizacao/Exilados.apk` : `${BASE}atualizacao/Exilados.exe`;
+  botao.setAttribute('download', android ? 'Exilados.apk' : 'Exilados.exe');
+  botao.title = rotulo;
+  botao.setAttribute('aria-label', rotulo);
   limpar(botao, icone('baixar'));
-  botao.addEventListener('click', () => aviso('Baixando o Exilados para Windows. Abra o Exilados.exe e entre com a mesma conta daqui.', {
-    acao: { rotulo: 'Como usar', fn: () => abrirConfig('transmitir') },
-    duracao: 10000,
+  botao.addEventListener('click', () => (android
+    ? aviso('Baixando o app do Exilados. Abra o Exilados.apk e permita instalar (o Android pede uma vez); depois entre com a mesma conta daqui.', { duracao: 12000 })
+    : aviso('Baixando o Exilados para Windows. Abra o Exilados.exe e entre com a mesma conta daqui.', {
+      acao: { rotulo: 'Como usar', fn: () => abrirConfig('transmitir') },
+      duracao: 10000,
+    })));
+}
+
+/** Dentro do programa: QR code para baixar o app no celular (Android). */
+function botaoCelular() {
+  $('trilho-baixar-separador').hidden = false;
+  $('trilho-celular').hidden = false;
+  const botao = $('baixar-celular');
+  limpar(botao, icone('celular'));
+  botao.addEventListener('click', () => janela({
+    titulo: 'Exilados no celular',
+    conteudo: el('div', { class: 'qr-celular' },
+      el('div', { class: 'qr' }, svgDoQr(ENDERECO_APK, 'QR code para baixar o app do Exilados')),
+      el('p', { text: 'Aponte a câmera do celular Android para o código e abra o link: o app do Exilados começa a baixar. Abra o Exilados.apk, permita instalar (o Android pede uma vez) e entre com a mesma conta daqui.' }),
+      el('p', { class: 'ajuda', text: 'No iPhone, use o site: filabox3d.com.br/exilados' })),
+    botoes: [{ rotulo: 'Fechar' }],
   }));
 }
 
@@ -339,7 +372,6 @@ function setinhaAtualizacao() {
     botao.title = rotulo;
     botao.setAttribute('aria-label', rotulo);
     $('trilho-baixar').hidden = !nova;
-    $('trilho-baixar-separador').hidden = !nova;
   });
 }
 

@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- O ícone "maskable" do site (feito para mostrar 80% dele) dentro da área visível do ícone adaptável do Android. -->
+<inset xmlns:android="http://schemas.android.com/apk/res/android"
+    android:drawable="@drawable/icone_mascara"
+    android:inset="12.7dp" />

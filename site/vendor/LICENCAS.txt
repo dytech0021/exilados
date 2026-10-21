@@ -2,6 +2,7 @@ Bibliotecas copiadas sem mudanças dos pacotes do npm (versão fixa no nome do a
 
 supabase-2.117.2.js       @supabase/supabase-js 2.117.2 (dist/umd/supabase.js), licença MIT
 livekit-client-2.22.3.js  livekit-client 2.22.3 (dist/livekit-client.umd.js), licença Apache 2.0
+qrcode-generator-2.0.4.js qrcode-generator 2.0.4 (dist/qrcode.mjs), licença MIT, Copyright (c) 2009 Kazuhiko Arase
 
 === @supabase/supabase-js ===
 MIT License

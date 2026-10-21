@@ -8,6 +8,7 @@
   },
   "devDependencies": {
     "@jitsi/rnnoise-wasm": "0.2.1",
-    "esbuild": "0.25.12"
+    "esbuild": "0.25.12",
+    "qrcode-generator": "2.0.4"
   }
 }

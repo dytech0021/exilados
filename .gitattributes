@@ -5,3 +5,6 @@
 *.png binary
 *.ico binary
 *.webp binary
+*.bat text eol=crlf
+*.jar binary
+*.apk binary

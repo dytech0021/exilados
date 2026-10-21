@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <color name="fundo">#FF1E1F22</color>
+    <color name="fundo_icone">#FFBDAAFF</color>
+
+    <!-- Escuro como o site. No Android 15 (values-v35), fora do modo de borda a borda. -->
+    <style name="Tema" parent="android:Theme.Material.NoActionBar">
+        <item name="android:windowBackground">@color/fundo</item>
+        <item name="android:colorBackground">@color/fundo</item>
+        <item name="android:statusBarColor">@color/fundo</item>
+        <item name="android:navigationBarColor">@color/fundo</item>
+    </style>
+</resources>
