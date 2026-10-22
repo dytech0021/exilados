@@ -156,11 +156,14 @@ create policy exilados_lidas_ler on public.exilados_lidas for select to authenti
 -- Marca como lido até a mensagem `ate` (nunca volta para trás).
 create or replace function public.exilados_marcar_lida(alvo uuid, ate bigint) returns void
 language plpgsql security definer set search_path = '' as $$
+#variable_conflict use_column
 begin
-  if not public.exilados_e_membro() or alvo is null or ate is null or ate < 0 then
+  if not public.exilados_e_membro() or exilados_marcar_lida.alvo is null or exilados_marcar_lida.ate is null
+     or exilados_marcar_lida.ate < 0 then
     return;
   end if;
-  insert into public.exilados_lidas (user_id, alvo, ultima) values (auth.uid(), alvo, ate)
+  insert into public.exilados_lidas (user_id, alvo, ultima)
+  values (auth.uid(), exilados_marcar_lida.alvo, exilados_marcar_lida.ate)
   on conflict (user_id, alvo) do update set ultima = greatest(public.exilados_lidas.ultima, excluded.ultima),
     atualizada_em = now();
 end;
