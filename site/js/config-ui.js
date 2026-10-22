@@ -112,6 +112,13 @@ async function paginaVoz(secao) {
     catch (falha) { portaDeVoz.checked = !portaDeVoz.checked; erro(falha); }
     finally { portaDeVoz.disabled = cancelamentoRuido.checked; }
   });
+  const somDoComputador = el('input', { type: 'checkbox', checked: p.somDoComputador, attrs: { 'aria-label': 'Tirar do microfone o som do computador' } });
+  somDoComputador.addEventListener('change', async () => {
+    somDoComputador.disabled = true;
+    try { await voz.definirSomDoComputador(somDoComputador.checked); }
+    catch (falha) { somDoComputador.checked = !somDoComputador.checked; erro(falha); }
+    finally { somDoComputador.disabled = false; }
+  });
   const volumeSaida = el('input', {
     type: 'range', class: 'faixa-config', min: 0, max: voz.VOLUME_MAXIMO, value: Math.min(p.volumeSaida, voz.VOLUME_MAXIMO),
     attrs: { 'aria-label': 'Volume de saída' },
@@ -204,6 +211,8 @@ async function paginaVoz(secao) {
     el('p', { class: 'ajuda', text: 'Fale algo: a barra mostra o que o microfone capta (com o volume de entrada acima).' }),
     botaoTeste, medidor,
     el('h3', { text: 'Processamento' }),
+    voz.ANDROID ? null : el('label', { class: 'opcao-voz' }, somDoComputador, el('span', { text: 'Tirar do microfone o som do computador (jogo, vídeo, live)' })),
+    voz.ANDROID ? null : el('p', { class: 'ajuda', text: 'Como no Discord: tudo o que sai do computador serve de referência para apagar o que vaza do fone para o microfone. Se sua voz falhar enquanto toca algum som, desligue.' }),
     voz.ANDROID ? null : el('label', { class: 'opcao-voz' }, portaDeVoz, el('span', { text: 'Só mandar som quando eu estiver falando (porta de voz)' })),
     voz.ANDROID ? null : el('p', { class: 'ajuda', text: 'Entre as falas, o microfone fica fechado: o som do jogo ou do vídeo que vaza do fone para o microfone não vai para a sala. A voz passa como é, sem filtro.' }),
     el('label', { class: 'opcao-voz' }, cancelamentoRuido, el('span', { text: 'Cancelamento de ruído do microfone' })),

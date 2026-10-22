@@ -1,6 +1,15 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { montagemDaVoz, restricaoDoMicrofone } from '../js/montagem-voz.js';
+import { modoDoEco, montagemDaVoz, restricaoDoMicrofone } from '../js/montagem-voz.js';
+
+test('no computador, o cancelamento de eco usa o som do computador como referência (como no Discord)', () => {
+  assert.equal(modoDoEco({ android: false, somDoComputador: true }), 'all');
+});
+
+test('desligado, ou no Android, o cancelamento de eco é o normal (só o som da chamada)', () => {
+  assert.equal(modoDoEco({ android: false, somDoComputador: false }), true);
+  assert.equal(modoDoEco({ android: true, somDoComputador: true }), true);
+});
 
 test('no Windows, sem escolha, o microfone é o de comunicação do Windows (o que ele usa em chamadas)', () => {
   assert.deepEqual(restricaoDoMicrofone({ entrada: null, windows: true }), { ideal: 'communications' });

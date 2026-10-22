@@ -13,7 +13,7 @@ import { avisar, estado, meuId } from './estado.js';
 import { api } from './supa.js';
 import { opcoesPublicacaoTela, qualidadeRecebida } from './qualidade-tela.js';
 import { conectarFiltroRuido } from './filtro-ruido.js';
-import { montagemDaVoz, restricaoDoMicrofone } from './montagem-voz.js';
+import { modoDoEco, montagemDaVoz, restricaoDoMicrofone } from './montagem-voz.js';
 import { volumeNaFaixa } from './volume.js';
 import { faltaSomDaTela } from './som-tela.js';
 import { aviso, confirmar } from './ui.js';
@@ -61,6 +61,7 @@ export function preferencias() {
     prefs.cancelamentoRuido ??= false;
     prefs.ruidoForte ??= ANDROID;
     prefs.portaDeVoz ??= false;
+    prefs.somDoComputador ??= true;
     if (!prefs.porta1021) {
       // A porta de voz cortava a fala (ficou ruim no teste): desligada para todos uma vez; quem quiser, liga de novo.
       prefs.portaDeVoz = false;
@@ -179,7 +180,7 @@ function carregarLiveKit() {
 
 const restricoes = (deviceId, ruidoForte = false) => ({
   deviceId: restricaoDoMicrofone({ entrada: deviceId, windows: /Windows/i.test(navigator.userAgent) }),
-  echoCancellation: true,
+  echoCancellation: modoDoEco({ android: ANDROID, somDoComputador: preferencias().somDoComputador }),
   noiseSuppression: true,
   // No celular, o ganho automático pode amplificar a TV/ambiente entre as falas.
   autoGainControl: !(ANDROID && ruidoForte),
@@ -893,6 +894,22 @@ export async function definirPortaDeVoz(ligada) {
     await definirEntrada(p.entrada);
   } catch (falha) {
     p.portaDeVoz = anterior;
+    guardar();
+    throw falha;
+  }
+}
+
+/** Tirar do microfone o som do computador (jogo, vídeo, live), como o Discord. Troca na hora, na sala. */
+export async function definirSomDoComputador(ligado) {
+  const p = preferencias();
+  const anterior = p.somDoComputador;
+  p.somDoComputador = Boolean(ligado);
+  guardar();
+  if (!microfone?.trilha) return;
+  try {
+    await definirEntrada(p.entrada);
+  } catch (falha) {
+    p.somDoComputador = anterior;
     guardar();
     throw falha;
   }
