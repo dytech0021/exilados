@@ -1,7 +1,7 @@
 // Service worker do Exilados (escopo /exilados/): guarda a casca do site para abrir rápido e funcionar como
 // aplicativo instalado. Sempre tenta a rede primeiro (o site muda sem aviso); a cópia guardada só entra quando a
 // rede falha. API, voz, lives e atualização nunca passam por aqui.
-const VERSAO = 'exilados-casca-20';
+const VERSAO = 'exilados-casca-21';
 const CASCA = [
   './',
   'index.html',
@@ -10,7 +10,7 @@ const CASCA = [
   'vendor/supabase-2.117.2.js',
   'vendor/noise-worklet.js',
   'vendor/qrcode-generator-2.0.4.js',
-  'js/app.js', 'js/android.js', 'js/chamadas.js', 'js/lidas.js', 'js/nativo.js', 'js/seletores.js', 'js/api.js', 'js/amigos.js', 'js/auth.js', 'js/chat.js', 'js/config.js', 'js/config-ui.js',
+  'js/app.js', 'js/android.js', 'js/anuncio.js', 'js/chamadas.js', 'js/lidas.js', 'js/nativo.js', 'js/seletores.js', 'js/api.js', 'js/amigos.js', 'js/auth.js', 'js/chat.js', 'js/config.js', 'js/config-ui.js',
   'js/dados.js', 'js/estabilidade.js', 'js/estado.js', 'js/filtro-ruido.js', 'js/flutuante.js', 'js/formato.js', 'js/grupo.js', 'js/imagens.js', 'js/live.js', 'js/montagem-voz.js', 'js/presenca.js', 'js/programa.js', 'js/qr.js', 'js/qualidade-tela.js',
   'js/som-tela.js', 'js/supa.js', 'js/tela.js', 'js/ui.js', 'js/versao.js', 'js/volume.js', 'js/voz.js',
   'icones/icone-192.png?v=2', 'icones/icone-180.png?v=2',

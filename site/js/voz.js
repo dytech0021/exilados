@@ -9,7 +9,8 @@
 // gastar a internet de quem não está assistindo.
 import { LIVEKIT_SCRIPT } from './config.js';
 import { atualizarPresenca, avisarQueFalo } from './dados.js';
-import { avisar, estado, meuId } from './estado.js';
+import { avisar, estado, meuId, nomeDe } from './estado.js';
+import { anunciarEntrada } from './anuncio.js';
 import { api } from './supa.js';
 import { opcoesPublicacaoTela, qualidadeRecebida } from './qualidade-tela.js';
 import { conectarFiltroRuido } from './filtro-ruido.js';
@@ -62,6 +63,7 @@ export function preferencias() {
     prefs.ruidoForte ??= ANDROID;
     prefs.portaDeVoz ??= false;
     prefs.somDoComputador ??= true;
+    prefs.anunciarEntradas ??= true;
     if (!prefs.porta1021) {
       // A porta de voz cortava a fala (ficou ruim no teste): desligada para todos uma vez; quem quiser, liga de novo.
       prefs.portaDeVoz = false;
@@ -442,7 +444,13 @@ function montarEventos(LKC, room) {
       }
     })
     .on(E.MediaDevicesChanged, () => avisar('dispositivos'))
-    .on(E.ParticipantConnected, () => mudou())
+    .on(E.ParticipantConnected, (participante) => {
+      // O LiveKit só avisa quem entra depois que já estamos na sala (não quem já estava lá).
+      mudou();
+      try {
+        anunciarEntrada(nomeDe(participante.identity), { ligado: preferencias().anunciarEntradas, surdo: voz.surdo });
+      } catch { /* sem leitura em voz alta */ }
+    })
     .on(E.ParticipantDisconnected, () => { mudou(); avisar('telas'); })
     .on(E.Disconnected, (motivo) => {
       if (room !== sala) return;
@@ -898,6 +906,12 @@ export async function definirPortaDeVoz(ligada) {
     guardar();
     throw falha;
   }
+}
+
+/** Ler em voz alta o nome de quem entra na sala. */
+export function definirAnunciarEntradas(ligado) {
+  preferencias().anunciarEntradas = Boolean(ligado);
+  guardar();
 }
 
 /** Tirar do microfone o som do computador (jogo, vídeo, live), como o Discord. Troca na hora, na sala. */
