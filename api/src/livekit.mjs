@@ -33,6 +33,17 @@ export class LiveKit {
     return (dados.rooms || []).map((sala) => sala.name).filter(Boolean);
   }
 
+  /** Quem está conectado em `sala` (identidades), pelo próprio LiveKit. */
+  async participantes(sala) {
+    try {
+      const dados = await this.#chamar('ListParticipants', { room: sala }, sala);
+      return (dados.participants || []).map((p) => p.identity).filter(Boolean);
+    } catch (erro) {
+      if (erro.codigo === 'not_found') return [];
+      throw erro;
+    }
+  }
+
   async removerParticipante(sala, identidade) {
     try {
       await this.#chamar('RemoveParticipant', { room: sala, identity: identidade }, sala);

@@ -1,13 +1,21 @@
 // Rotas públicas do exilados-api (atrás do nginx em /exilados/api/).
 //
-// Todo pedido, menos /saude, traz o login do Supabase (Authorization: Bearer) de um membro ativo do grupo.
+// Todo pedido, menos /saude, /midia e /gif (imagens que o site mostra), traz o login do Supabase (Authorization:
+// Bearer) de um membro ativo do grupo.
+import { gifAceito } from './gifs.mjs';
 import { tokenDoLiveKit } from './jwt.mjs';
 import { SEM_SINAL_MS } from './lives.mjs';
+import { conferirMidia, montarPrevia } from './previa.mjs';
+import { buscar, enderecoAceito } from './web.mjs';
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
 const MAX_CORPO = 4096;
 // Tolerância para relógios um pouco diferentes entre o serviço e o banco.
 const FOLGA_MS = 5000;
+const PREVIA_MS = 6 * 60 * 60 * 1000;
+const PRESENTES_MS = 3000;
+// Imagens de fora: nunca SVG (pode trazer código) nem outra coisa que não imagem.
+const TIPO_IMAGEM = /^image\/(png|jpe?g|gif|webp|avif|bmp)$/;
 
 class Recusa extends Error {
   constructor(status, mensagem) {
@@ -53,7 +61,36 @@ function responder(resposta, status, dados) {
   resposta.end(corpo);
 }
 
-export function criarRotas({ supabase, livekit, lives, mediamtx, config, agora = () => Date.now(), registrar = console.error }) {
+/** Limite simples de pedidos por pessoa: `quantos` a cada `janela` ms. */
+function criarLimite(quantos, janela, agora) {
+  const contas = new Map();
+  return (id) => {
+    const t = agora();
+    const conta = contas.get(id);
+    if (!conta || t - conta.inicio > janela) {
+      if (contas.size > 1000) contas.clear();
+      contas.set(id, { inicio: t, n: 1 });
+      return;
+    }
+    conta.n += 1;
+    if (conta.n > quantos) throw new Recusa(429, 'Muitos pedidos seguidos. Espere um pouco.');
+  };
+}
+
+function guardarCom(mapa, chave, valor, limite = 500) {
+  if (mapa.size >= limite) mapa.delete(mapa.keys().next().value);
+  mapa.set(chave, valor);
+}
+
+export function criarRotas({
+  supabase, livekit, lives, mediamtx, config, gifs = null, buscarWeb = buscar, segredoMidia = config.livesSegredo,
+  agora = () => Date.now(), registrar = console.error,
+}) {
+  const previas = new Map();
+  const limitePrevia = criarLimite(60, 60000, agora);
+  const limiteGifs = criarLimite(40, 60000, agora);
+  let presentes = { ate: 0, salas: null };
+
   async function quemPede(pedido) {
     const cabecalho = String(pedido.headers.authorization || '');
     const token = cabecalho.startsWith('Bearer ') ? cabecalho.slice(7).trim() : '';
@@ -66,12 +103,22 @@ export function criarRotas({ supabase, livekit, lives, mediamtx, config, agora =
   }
 
   const rotas = {
+    // Sala de voz do grupo ({ sala }) ou chamada numa conversa direta ({ conversa }, só os dois amigos).
     async 'POST /voz/entrar'({ token, id, membro }, corpo) {
-      const salaId = String(corpo.sala || '');
-      if (!UUID.test(salaId)) throw new Recusa(400, 'Sala inválida.');
-      const sala = await supabase.sala(token, salaId);
-      if (!sala || sala.tipo !== 'voz') throw new Recusa(404, 'A sala não existe mais.');
-      const nomeSala = `sala-${salaId}`;
+      let nomeSala;
+      if (corpo.conversa !== undefined) {
+        const conversaId = String(corpo.conversa || '');
+        if (!UUID.test(conversaId)) throw new Recusa(400, 'Conversa inválida.');
+        const conversa = await supabase.conversa(token, conversaId);
+        if (!conversa || ![conversa.a, conversa.b].includes(id)) throw new Recusa(404, 'Chamada só entre amigos.');
+        nomeSala = `conversa-${conversaId}`;
+      } else {
+        const salaId = String(corpo.sala || '');
+        if (!UUID.test(salaId)) throw new Recusa(400, 'Sala inválida.');
+        const sala = await supabase.sala(token, salaId);
+        if (!sala || sala.tipo !== 'voz') throw new Recusa(404, 'A sala não existe mais.');
+        nomeSala = `sala-${salaId}`;
+      }
       return {
         url: config.urlVoz,
         sala: nomeSala,
@@ -85,6 +132,48 @@ export function criarRotas({ supabase, livekit, lives, mediamtx, config, agora =
           agora: agora(),
         }),
       };
+    },
+
+    // Quem está mesmo em cada sala de voz do grupo, pelo LiveKit (o site corrige a presença com isso: quem caiu
+    // sem avisar some da sala). Chamadas de conversa direta ficam de fora.
+    async 'POST /voz/presentes'() {
+      if (agora() > presentes.ate || !presentes.salas) {
+        const salas = {};
+        for (const nome of await livekit.listarSalas()) {
+          if (!nome.startsWith('sala-')) continue;
+          const ids = await livekit.participantes(nome);
+          if (ids.length) salas[nome.slice(5)] = ids;
+        }
+        presentes = { ate: agora() + PRESENTES_MS, salas };
+      }
+      return { salas: presentes.salas };
+    },
+
+    async 'POST /previa'({ id }, corpo) {
+      const endereco = String(corpo.url || '').slice(0, 2000);
+      if (!enderecoAceito(endereco)) throw new Recusa(400, 'Endereço inválido.');
+      const guardada = previas.get(endereco);
+      if (guardada && guardada.ate > agora()) return { previa: guardada.previa };
+      limitePrevia(id);
+      let previa = null;
+      try {
+        previa = await montarPrevia(endereco, { segredo: segredoMidia, buscarWeb });
+      } catch {
+        previa = null; // site fora do ar, lento ou bloqueado: sem prévia
+      }
+      guardarCom(previas, endereco, { previa, ate: agora() + (previa ? PREVIA_MS : PREVIA_MS / 6) });
+      return { previa };
+    },
+
+    async 'POST /gifs'({ id }, corpo) {
+      if (!gifs?.ligado) throw new Recusa(404, 'GIFs desligados neste servidor.');
+      limiteGifs(id);
+      try {
+        return { gifs: await gifs.listar(corpo.busca, Number(corpo.pagina) || 0) };
+      } catch (erro) {
+        registrar(`GIFs: ${erro.message}`);
+        throw new Recusa(502, 'A busca de GIFs não respondeu agora. Tente de novo.');
+      }
     },
 
     async 'POST /membros/ativo'({ token, membro }, corpo) {
@@ -152,12 +241,42 @@ export function criarRotas({ supabase, livekit, lives, mediamtx, config, agora =
     },
   };
 
+  /** Serve uma imagem de fora (prévia de link ou GIF), conferida e com cache no navegador. */
+  async function servirImagem(resposta, endereco) {
+    let r;
+    try {
+      r = await buscarWeb(endereco, { maxBytes: 12 * 1024 * 1024, prazo: 10000, cabecalhos: { accept: 'image/avif,image/webp,image/*;q=0.8' } });
+    } catch {
+      throw new Recusa(404, 'Imagem indisponível.');
+    }
+    const tipo = String(r.cabecalhos['content-type'] || '').split(';')[0].trim().toLowerCase();
+    if (r.status !== 200 || r.cortado || !TIPO_IMAGEM.test(tipo)) throw new Recusa(404, 'Imagem indisponível.');
+    resposta.writeHead(200, {
+      'content-type': tipo,
+      'content-length': r.corpo.length,
+      'cache-control': 'public, max-age=86400, immutable',
+      'x-content-type-options': 'nosniff',
+      'content-security-policy': "default-src 'none'; sandbox",
+    });
+    resposta.end(r.corpo);
+  }
+
   return async function (pedido, resposta) {
     try {
       const url = new URL(pedido.url, 'http://local');
       const caminho = url.pathname.replace(/^\/exilados\/api/, '') || '/';
       if (pedido.method === 'GET' && caminho === '/saude') {
-        return responder(resposta, 200, { ok: true, agora: agora() });
+        return responder(resposta, 200, { ok: true, agora: agora(), gifs: Boolean(gifs?.ligado) });
+      }
+      if (pedido.method === 'GET' && caminho === '/midia') {
+        const endereco = url.searchParams.get('u') || '';
+        if (!conferirMidia(endereco, url.searchParams.get('a'), segredoMidia)) throw new Recusa(404, 'Não encontrado.');
+        return await servirImagem(resposta, endereco);
+      }
+      if (pedido.method === 'GET' && caminho === '/gif') {
+        const endereco = gifAceito(url.searchParams.get('u') || '');
+        if (!endereco) throw new Recusa(404, 'Não encontrado.');
+        return await servirImagem(resposta, endereco.href);
       }
       const rota = rotas[`${pedido.method} ${caminho}`];
       if (!rota) throw new Recusa(404, 'Não encontrado.');

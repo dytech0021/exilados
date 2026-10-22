@@ -107,3 +107,106 @@ export function lerId(texto) {
   const d = String(texto || '').replace(/[\s.\-]/g, '');
   return /^[1-9]\d{8}$/.test(d) ? d : null;
 }
+
+// ---------- menções ----------
+
+const LIMITE_DE_PALAVRA = /[\s.,:;!?'")\]}>]/;
+
+/**
+ * Quem a mensagem menciona: `@Nome` de cada membro em `membros` ([{ user_id, nome }], nomes com espaço valem) e
+ * `@todos` (só onde `podeTodos`). Ignora maiúsculas; o nome precisa terminar ali (não vale "@Anabela" para "Ana").
+ */
+export function acharMencoes(texto, membros, { podeTodos = false } = {}) {
+  const t = String(texto || '');
+  const minusculo = t.toLocaleLowerCase('pt-BR');
+  const ids = new Set();
+  const terminaAqui = (fim) => fim >= t.length || LIMITE_DE_PALAVRA.test(t[fim]);
+  for (const m of membros) {
+    const alvo = `@${String(m.nome || '').toLocaleLowerCase('pt-BR')}`;
+    if (alvo.length < 2) continue;
+    let i = minusculo.indexOf(alvo);
+    while (i >= 0) {
+      if ((i === 0 || /\s|[(\[]/.test(t[i - 1])) && terminaAqui(i + alvo.length)) {
+        ids.add(m.user_id);
+        break;
+      }
+      i = minusculo.indexOf(alvo, i + 1);
+    }
+  }
+  const todos = podeTodos && /(^|\s)@todos(?=$|[\s.,:;!?])/i.test(t);
+  return { mencoes: [...ids], todos };
+}
+
+/**
+ * Divide um pedaço de texto em texto comum e menções: `nomes` é { user_id: nome } dos mencionados; `todos` marca
+ * "@todos". Devolve [{ tipo: 'texto'|'mencao', valor, id? }].
+ */
+export function partesComMencoes(texto, nomes, todos = false) {
+  const alvos = Object.entries(nomes || {}).map(([id, nome]) => ({ id, rotulo: `@${nome}` }));
+  if (todos) alvos.push({ id: 'todos', rotulo: '@todos' });
+  alvos.sort((a, b) => b.rotulo.length - a.rotulo.length);
+  const t = String(texto || '');
+  const minusculo = t.toLocaleLowerCase('pt-BR');
+  const partes = [];
+  let fim = 0;
+  let i = 0;
+  while (i < t.length) {
+    const achado = t[i] === '@' && (i === 0 || /\s|[(\[]/.test(t[i - 1]))
+      ? alvos.find((a) => minusculo.startsWith(a.rotulo.toLocaleLowerCase('pt-BR'), i)
+        && (i + a.rotulo.length >= t.length || LIMITE_DE_PALAVRA.test(t[i + a.rotulo.length])))
+      : null;
+    if (!achado) {
+      i += 1;
+      continue;
+    }
+    if (i > fim) partes.push({ tipo: 'texto', valor: t.slice(fim, i) });
+    partes.push({ tipo: 'mencao', valor: t.slice(i, i + achado.rotulo.length), id: achado.id });
+    i += achado.rotulo.length;
+    fim = i;
+  }
+  if (fim < t.length) partes.push({ tipo: 'texto', valor: t.slice(fim) });
+  return partes;
+}
+
+/** A palavra com "@" que está sendo digitada até o cursor ("@an" → "an"), ou null. */
+export function mencaoDigitando(texto, cursor) {
+  const antes = String(texto || '').slice(0, cursor);
+  const achado = /(?:^|\s)@([^\s@]{0,32})$/.exec(antes);
+  return achado ? achado[1] : null;
+}
+
+// ---------- arquivos ----------
+
+export const LIMITE_ARQUIVO = 25 * 1024 * 1024;
+
+/** "1,5 MB", "820 KB", "12 bytes". */
+export function tamanhoLegivel(bytes) {
+  const n = Number(bytes) || 0;
+  if (n >= 1024 * 1024) return `${(n / (1024 * 1024)).toLocaleString('pt-BR', { maximumFractionDigits: 1 })} MB`;
+  if (n >= 1024) return `${Math.round(n / 1024)} KB`;
+  return `${n} bytes`;
+}
+
+/** Nome de arquivo seguro para o armazenamento (sem pastas, acentos ou símbolos estranhos), até 80 caracteres. */
+export function nomeSeguro(nome) {
+  const limpo = String(nome || 'arquivo').normalize('NFD').replace(/[̀-ͯ]/g, '')
+    .replace(/[^A-Za-z0-9._-]+/g, '-').replace(/^[-.]+|-+$/g, '');
+  const ponto = limpo.lastIndexOf('.');
+  const ext = ponto > 0 ? limpo.slice(ponto).slice(0, 12) : '';
+  const base = (ponto > 0 ? limpo.slice(0, ponto) : limpo).slice(0, 80 - ext.length) || 'arquivo';
+  return base + ext;
+}
+
+/** Como mostrar um arquivo pelo tipo: 'video', 'audio', 'imagem' ou 'arquivo'. */
+export function jeitoDoArquivo(tipo) {
+  const t = String(tipo || '');
+  if (/^video\/(mp4|webm|ogg|quicktime)$/.test(t)) return 'video';
+  if (/^audio\//.test(t)) return 'audio';
+  if (/^image\/(png|jpe?g|gif|webp|avif)$/.test(t)) return 'imagem';
+  return 'arquivo';
+}
+
+/** Os links http(s) do texto, sem repetir, na ordem. */
+export function linksDoTexto(texto) {
+  return [...new Set(partesDoTexto(texto).filter((p) => p.tipo === 'link').map((p) => p.valor))];
+}

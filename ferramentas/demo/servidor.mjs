@@ -8,7 +8,10 @@ import { readFile } from 'node:fs/promises';
 import http from 'node:http';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { Gifs, gifAceito } from '../../api/src/gifs.mjs';
 import { tokenDoLiveKit } from '../../api/src/jwt.mjs';
+import { conferirMidia, montarPrevia } from '../../api/src/previa.mjs';
+import { buscar } from '../../api/src/web.mjs';
 
 const aqui = path.dirname(fileURLToPath(import.meta.url));
 // Chave do LiveKit para testar a voz de verdade: variáveis de ambiente ou um arquivo (--livekit arquivo) com
@@ -41,13 +44,52 @@ const NOMES = {
   '00000000-0000-4000-8000-000000000004': 'Bia',
 };
 
-async function api(caminho, corpo, resposta, autorizacao = '') {
+// Prévias, imagens de fora e GIFs de verdade na demonstração (os GIFs só com GIPHY_CHAVE no ambiente).
+const SEGREDO_MIDIA = 'demonstracao';
+const gifs = new Gifs({ chave: process.env.GIPHY_CHAVE || '' });
+
+async function servirImagem(resposta, endereco) {
+  try {
+    const r = await buscar(endereco, { maxBytes: 12 * 1024 * 1024, prazo: 10000 });
+    const tipo = String(r.cabecalhos['content-type'] || '').split(';')[0];
+    if (r.status !== 200 || !/^image\/(png|jpe?g|gif|webp|avif)$/.test(tipo)) throw new Error('não é imagem');
+    resposta.writeHead(200, { 'content-type': tipo, 'cache-control': 'public, max-age=86400' });
+    resposta.end(r.corpo);
+  } catch {
+    resposta.writeHead(404);
+    resposta.end();
+  }
+}
+
+async function api(caminho, corpo, resposta, autorizacao = '', url = null) {
   const quem = /^Bearer demo-([0-9a-f-]{36})$/.exec(autorizacao)?.[1];
   const identidade = NOMES[quem] ? quem : '00000000-0000-4000-8000-000000000001';
-  if (caminho === '/saude') return json(resposta, 200, { ok: true, agora: Date.now() });
+  if (caminho === '/saude') return json(resposta, 200, { ok: true, agora: Date.now(), gifs: gifs.ligado });
+  if (caminho === '/midia') {
+    const u = url.searchParams.get('u') || '';
+    if (!conferirMidia(u, url.searchParams.get('a'), SEGREDO_MIDIA)) return json(resposta, 404, { erro: 'Não encontrado.' });
+    return servirImagem(resposta, u);
+  }
+  if (caminho === '/gif') {
+    const u = gifAceito(url.searchParams.get('u') || '');
+    return u ? servirImagem(resposta, u.href) : json(resposta, 404, { erro: 'Não encontrado.' });
+  }
+  if (caminho === '/previa') {
+    let previa = null;
+    try { previa = await montarPrevia(String(corpo.url || ''), { segredo: SEGREDO_MIDIA }); } catch { previa = null; }
+    return json(resposta, 200, { previa });
+  }
+  if (caminho === '/gifs') {
+    if (!gifs.ligado) return json(resposta, 404, { erro: 'GIFs desligados neste servidor.' });
+    return json(resposta, 200, { gifs: await gifs.listar(corpo.busca, corpo.pagina) });
+  }
+  // As duas pessoas fictícias que estão na sala Geral, como o LiveKit diria.
+  if (caminho === '/voz/presentes') {
+    return json(resposta, 200, { salas: { '10000000-0000-4000-8000-000000000003': ['00000000-0000-4000-8000-000000000002', '00000000-0000-4000-8000-000000000003'] } });
+  }
   if (caminho === '/voz/entrar') {
     if (!process.env.LIVEKIT_CHAVE || !process.env.LIVEKIT_SEGREDO) return json(resposta, 503, { erro: 'Voz indisponível na demonstração (sem chave do LiveKit).' });
-    const sala = `sala-${corpo.sala}`;
+    const sala = corpo.conversa ? `conversa-${corpo.conversa}` : `sala-${corpo.sala}`;
     return json(resposta, 200, {
       url: process.env.LIVEKIT_URL || 'wss://filabox3d.com.br/exilados',
       sala,
@@ -68,7 +110,7 @@ http.createServer(async (pedido, resposta) => {
   if (url.pathname.startsWith('/exilados/api/')) {
     let texto = '';
     for await (const parte of pedido) texto += parte;
-    return api(url.pathname.slice('/exilados/api'.length), texto ? JSON.parse(texto) : {}, resposta, pedido.headers.authorization);
+    return api(url.pathname.slice('/exilados/api'.length), texto ? JSON.parse(texto) : {}, resposta, pedido.headers.authorization, url);
   }
   if (!url.pathname.startsWith('/exilados/')) {
     resposta.writeHead(404);

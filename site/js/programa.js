@@ -19,6 +19,11 @@ export function criarPonte(ponte, info) {
       if (noPrograma) ponte.postMessage({ tipo: 'transmitir' });
     },
 
+    /** Manda um aviso qualquer ao programa (notificação, parar o toque da chamada). */
+    enviar(mensagem) {
+      if (noPrograma) ponte.postMessage(mensagem);
+    },
+
     /** Reinicia o programa na versão nova que ele já baixou. */
     atualizar() {
       if (noPrograma) ponte.postMessage({ tipo: 'atualizar' });
@@ -39,6 +44,11 @@ export function criarPonte(ponte, info) {
       ponte.addEventListener('message', async (evento) => {
         const pedido = evento.data;
         if (!pedido || typeof pedido !== 'object') return;
+        if (pedido.tipo === 'abrir') {
+          // Clicou no aviso do programa: abre a conversa ou a sala dele.
+          if (typeof pedido.alvo === 'string') window.exiladosAbrir?.(pedido.alvo);
+          return;
+        }
         if (pedido.tipo === 'atualizacao') {
           atualizacao = typeof pedido.versao === 'string' && pedido.versao ? pedido.versao : null;
           for (const fn of acompanham) fn(atualizacao);
@@ -65,5 +75,6 @@ export const { noPrograma } = programa;
 export const versaoDoPrograma = programa.versao;
 export const abrirTransmitir = () => programa.abrirTransmitir();
 export const atualizarPrograma = () => programa.atualizar();
+export const enviarAoPrograma = (mensagem) => programa.enviar(mensagem);
 export const quandoAtualizacao = (fn) => programa.quandoAtualizacao(fn);
 export const iniciarPrograma = (respostas) => programa.iniciar(respostas);

@@ -75,6 +75,12 @@ internal sealed class Bandeja : ApplicationContext
         ]);
         _icone = new NotifyIcon { Icon = Visual.Icone, Text = "Exilados", ContextMenuStrip = menu, Visible = true };
         _icone.DoubleClick += (_, _) => MostrarPrincipal();
+        _icone.BalloonTipClicked += (_, _) =>
+        {
+            MostrarPrincipal();
+            if (_alvoDoAviso.Length > 0) _principal?.AbrirNoSite(_alvoDoAviso);
+        };
+        _icone.BalloonTipClosed += (_, _) => _alvoDoAviso = "";
         AtualizarMenu();
 
         // Uma segunda cópia aberta só pede para esta mostrar a janela.
@@ -182,6 +188,24 @@ internal sealed class Bandeja : ApplicationContext
     }
 
     public void MostrarTransmitir() => _ = MostrarTransmitirAsync();
+
+    private string _alvoDoAviso = "";
+
+    /// <summary>
+    /// Aviso de mensagem direta, menção ou chamada vindo do site. Com o Exilados na frente, o site já mostrou; senão,
+    /// balão perto do relógio (o clique abre a conversa). Na chamada, a janela também vem à vista e pisca.
+    /// </summary>
+    public void Notificar(string titulo, string texto, string alvo, bool chamada)
+    {
+        if (_principal is { IsDisposed: false } principal)
+        {
+            if (chamada) principal.ChamarAtencao();
+            else if (principal.EmUso) return;
+        }
+        _alvoDoAviso = alvo;
+        string t = titulo.Length > 63 ? titulo[..63] : titulo;
+        _icone.ShowBalloonTip(chamada ? 30000 : 8000, t.Length > 0 ? t : "Exilados", texto.Length > 0 ? texto : " ", ToolTipIcon.Info);
+    }
 
     private async Task MostrarTransmitirAsync()
     {

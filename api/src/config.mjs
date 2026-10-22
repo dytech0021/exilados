@@ -20,5 +20,7 @@ export function lerConfig(env = process.env) {
     // Autorização do relay do Ponte para os caminhos que não são do Exilados; vazio deixa de repassar.
     relayAuth: env.RELAY_AUTH || '',
     livesSegredo: exigir('LIVES_SEGREDO', 32),
+    // Chave do Giphy para a busca de GIFs; vazia, o botão de GIF não aparece no site.
+    giphyChave: String(env.GIPHY_CHAVE || '').trim(),
   };
 }

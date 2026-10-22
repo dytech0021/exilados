@@ -40,11 +40,14 @@
     ],
     exilados_mensagens: [],
     exilados_lives: [{ user_id: MARINA, caminho: 'ex/AAAAAAAAAAAAAAAAAAAAAAAA', comecou_em: iso(agora - 600000), ultimo_sinal: iso(agora) }],
+    // Dyego e Lucas são amigos e já têm uma conversa direta (a mesma nas duas abas, para testar chamadas).
     exilados_amizades: [
-      { id: uuid(), de: EU, para: LUCAS, estado: 'aceita', criada_em: iso(agora - 864e5) },
+      { id: 'a0000000-0000-4000-8000-000000000001', de: EU === LUCAS ? DYEGO : EU, para: LUCAS, estado: 'aceita', criada_em: iso(agora - 864e5) },
       { id: uuid(), de: BIA, para: EU, estado: 'pendente', criada_em: iso(agora - 3600e3) },
     ],
-    exilados_conversas: [],
+    exilados_conversas: [DYEGO, LUCAS].includes(EU) ? [{ id: '20000000-0000-4000-8000-000000000001', a: DYEGO, b: LUCAS }] : [],
+    exilados_reacoes: [],
+    exilados_lidas: [],
     exilados_ids: [
       { user_id: EU, codigo: '855593920', nome: null },
       { user_id: LUCAS, codigo: '123456789', nome: null },
@@ -58,13 +61,26 @@
     [LUCAS, 'alguém pra jogar hoje?'], [EU, 'bora, daqui a pouco entro na Geral'], [MARINA, 'tô ao vivo, colem lá'],
     [LUCAS, 'link útil: https://filabox3d.com.br/exilados/ (é aqui mesmo kkk)'], [BIA, 'chegando!'],
   ];
+  const NOVA = {
+    editada_em: null, responde_a: null, mencoes: [], menciona_todos: false, arquivo: null, gif: null, chamada: false,
+  };
   for (let i = 0; i < 120; i += 1) {
     const [autor, texto] = falas[i % falas.length];
     db.exilados_mensagens.push({
-      id: idMensagem++, sala_id: S_GERAL, conversa_id: null, autor, texto: i < 115 ? `${texto} (${i + 1})` : texto, imagem: null,
+      ...NOVA, id: idMensagem++, sala_id: S_GERAL, conversa_id: null, autor, texto: i < 115 ? `${texto} (${i + 1})` : texto, imagem: null,
       criada_em: iso(agora - (120 - i) * 9 * 60000),
     });
   }
+  // Exemplos da conversa nova: menção, resposta, link do YouTube, reações e mensagem editada.
+  const comVideo = idMensagem++;
+  db.exilados_mensagens.push(
+    { ...NOVA, id: comVideo, sala_id: S_GERAL, conversa_id: null, autor: LUCAS, texto: `@${MEU_NOME} olha isso https://www.youtube.com/watch?v=dQw4w9WgXcQ`, imagem: null, mencoes: [EU], criada_em: iso(agora - 5 * 60000) },
+    { ...NOVA, id: idMensagem++, sala_id: S_GERAL, conversa_id: null, autor: MARINA, texto: 'kkkkk clássico', imagem: null, responde_a: comVideo, criada_em: iso(agora - 4 * 60000), editada_em: iso(agora - 3 * 60000) },
+    { ...NOVA, id: idMensagem++, sala_id: S_GERAL, conversa_id: null, autor: BIA, texto: '@todos hoje tem Geral às 21h', imagem: null, menciona_todos: true, criada_em: iso(agora - 2 * 60000) },
+  );
+  db.exilados_reacoes.push({ mensagem_id: comVideo, user_id: MARINA, emoji: '😂' }, { mensagem_id: comVideo, user_id: BIA, emoji: '😂' }, { mensagem_id: comVideo, user_id: LUCAS, emoji: '🔥' });
+  // Já leu até antes dos exemplos: eles aparecem como novos (com a linha "Novas").
+  db.exilados_lidas.push({ user_id: EU, alvo: S_GERAL, ultima: comVideo - 1 });
 
   const imagens = new Map();
   const ouvintes = [];
@@ -90,6 +106,7 @@
     }
     select() { return this; }
     eq(campo, valor) { this.filtros.push((r) => r[campo] === valor); return this; }
+    in(campo, valores) { this.filtros.push((r) => valores.includes(r[campo])); return this; }
     lt(campo, valor) { this.filtros.push((r) => r[campo] < valor); return this; }
     order(campo, { ascending = true } = {}) { this.ordem = { campo, ascending }; return this; }
     limit(n) { this.limite = n; return this; }
@@ -108,7 +125,10 @@
         const lista = Array.isArray(this.valores) ? this.valores : [this.valores];
         linhas = lista.map((v) => {
           const linha = { ...v };
-          if (this.tabela === 'exilados_mensagens') Object.assign(linha, { id: idMensagem++, criada_em: iso(Date.now()), sala_id: v.sala_id || null, conversa_id: v.conversa_id || null });
+          if (this.tabela === 'exilados_mensagens') Object.assign(linha, { ...NOVA, ...v, id: idMensagem++, criada_em: iso(Date.now()), sala_id: v.sala_id || null, conversa_id: v.conversa_id || null });
+          if (this.tabela === 'exilados_reacoes' && tabela.some((r) => r.mensagem_id === v.mensagem_id && r.user_id === v.user_id && r.emoji === v.emoji)) {
+            throw Object.assign(new Error('duplicate key value violates unique constraint'), {});
+          }
           if (this.tabela === 'exilados_amizades') {
             const repetida = tabela.some((a) => (a.de === v.de && a.para === v.para) || (a.de === v.para && a.para === v.de));
             if (repetida) throw Object.assign(new Error('duplicate key value violates unique constraint'), {});
@@ -123,13 +143,14 @@
         linhas = tabela.filter((r) => this.filtros.every((f) => f(r)));
         if (this.acao === 'update') {
           for (const r of linhas) {
+            if (this.tabela === 'exilados_mensagens' && 'texto' in this.valores && this.valores.texto !== r.texto) r.editada_em = iso(Date.now());
             Object.assign(r, this.valores);
             emitir(this.tabela, 'UPDATE', { ...r });
           }
         } else if (this.acao === 'delete') {
           for (const r of linhas) {
             tabela.splice(tabela.indexOf(r), 1);
-            emitir(this.tabela, 'DELETE', null, { id: r.id, user_id: r.user_id });
+            emitir(this.tabela, 'DELETE', null, { ...r });
           }
         }
         linhas = linhas.map((r) => ({ ...r }));
@@ -147,6 +168,30 @@
 
   async function rpc(nome, args) {
     await espera(100);
+    if (nome === 'exilados_nao_lidas') {
+      const alvos = [
+        ...db.exilados_salas.filter((x) => x.tipo === 'texto').map((x) => ({ alvo: x.id, sala: true })),
+        ...db.exilados_conversas.map((x) => ({ alvo: x.id, sala: false })),
+      ];
+      return {
+        data: alvos.map(({ alvo, sala }) => {
+          const daqui = db.exilados_mensagens.filter((m) => m.sala_id === alvo || m.conversa_id === alvo);
+          const lida = db.exilados_lidas.find((l) => l.user_id === EU && l.alvo === alvo)?.ultima ?? null;
+          const novas = daqui.filter((m) => m.id > (lida || 0) && m.autor !== EU);
+          return {
+            alvo, ultima: daqui.length ? Math.max(...daqui.map((m) => m.id)) : null, lida,
+            novas: Math.min(99, novas.length), mencoes: novas.filter((m) => (m.mencoes || []).includes(EU) || (sala && m.menciona_todos)).length,
+          };
+        }),
+        error: null,
+      };
+    }
+    if (nome === 'exilados_marcar_lida') {
+      const linha = db.exilados_lidas.find((l) => l.user_id === EU && l.alvo === args.alvo);
+      if (linha) linha.ultima = Math.max(linha.ultima, args.ate);
+      else db.exilados_lidas.push({ user_id: EU, alvo: args.alvo, ultima: args.ate });
+      return { data: null, error: null };
+    }
     if (nome === 'exilados_info_convite') return { data: [{ valido: true, convidado_por: 'Dyego' }], error: null };
     if (nome === 'exilados_criar_convite') return { data: 'demo'.padEnd(64, '0'), error: null };
     if (nome === 'exilados_meu_id') {
@@ -181,7 +226,7 @@
       if (!c) {
         c = { id: uuid(), a, b };
         db.exilados_conversas.push(c);
-        db.exilados_mensagens.push({ id: idMensagem++, sala_id: null, conversa_id: c.id, autor: args.outro, texto: 'e aí! (mensagem direta de demonstração)', imagem: null, criada_em: iso(Date.now() - 60000) });
+        db.exilados_mensagens.push({ ...NOVA, id: idMensagem++, sala_id: null, conversa_id: c.id, autor: args.outro, texto: 'e aí! (mensagem direta de demonstração)', imagem: null, criada_em: iso(Date.now() - 60000) });
       }
       return { data: c.id, error: null };
     }
@@ -223,7 +268,11 @@
       this.disparar('presence', 'sync');
       return 'ok';
     }
-    async send() { return 'ok'; }
+    // Recado do canal (digitando, chamada): vai para as outras abas da demonstração.
+    async send(mensagem) {
+      if (mensagem?.type === 'broadcast') entreAbas?.postMessage({ recado: { event: mensagem.event, payload: mensagem.payload } });
+      return 'ok';
+    }
     disparar(tipo, evento, dados) {
       for (const o of this.ouvintes) if (o.tipo === tipo && o.evento === evento) setTimeout(() => o.fn(dados || {}), 10);
     }
@@ -238,6 +287,10 @@
   const entreAbas = typeof BroadcastChannel === 'function' ? new BroadcastChannel('exilados-demo-presenca') : null;
   if (entreAbas) {
     entreAbas.onmessage = ({ data }) => {
+      if (data?.recado) {
+        canalGrupo()?.disparar('broadcast', data.recado.event, { payload: data.recado.payload });
+        return;
+      }
       if (data?.pedir) {
         if (minha) entreAbas.postMessage({ id: EU, meta: minha });
         return;
@@ -257,7 +310,7 @@
     canalGrupo()?.disparar('broadcast', 'falando', { payload: { id: LUCAS, falando } });
   }, 1500);
   setInterval(() => {
-    const linha = { id: idMensagem++, sala_id: S_GERAL, conversa_id: null, autor: LUCAS, texto: `mensagem automática ${new Date().toLocaleTimeString('pt-BR')}`, imagem: null, criada_em: iso(Date.now()) };
+    const linha = { ...NOVA, id: idMensagem++, sala_id: S_GERAL, conversa_id: null, autor: LUCAS, texto: `mensagem automática ${new Date().toLocaleTimeString('pt-BR')}`, imagem: null, criada_em: iso(Date.now()) };
     db.exilados_mensagens.push(linha);
     emitir('exilados_mensagens', 'INSERT', linha);
   }, 45000);
@@ -300,6 +353,7 @@
               async upload(caminho, blob) { await espera(200); imagens.set(caminho, URL.createObjectURL(blob)); return { data: { path: caminho }, error: null }; },
               async createSignedUrl(caminho) { return { data: { signedUrl: imagens.get(caminho) || null }, error: imagens.has(caminho) ? null : { message: 'não achei' } }; },
               async createSignedUrls(caminhos) { return { data: caminhos.map((p) => ({ path: p, signedUrl: imagens.get(p) || null })), error: null }; },
+              async remove(caminhos) { for (const c of caminhos) imagens.delete(c); return { data: [], error: null }; },
             };
           },
         },

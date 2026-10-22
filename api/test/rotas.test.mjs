@@ -16,6 +16,7 @@ const ANA = '11111111-1111-4111-8111-111111111111';
 const FORA = '99999999-9999-4999-8999-999999999999';
 const VOZ = 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb';
 const TEXTO = 'cccccccc-cccc-4ccc-8ccc-cccccccccccc';
+const CONVERSA = 'dddddddd-dddd-4ddd-8ddd-dddddddddddd';
 
 function ouvir(tratar) {
   return new Promise((resolve) => {
@@ -46,6 +47,8 @@ function supabaseFalso() {
     ]),
     salas: new Map([[VOZ, { id: VOZ, nome: 'Geral', tipo: 'voz' }], [TEXTO, { id: TEXTO, nome: 'geral', tipo: 'texto' }]]),
     lives: new Map(),
+    // Conversa direta entre o dono e a Ana.
+    conversas: new Map([[CONVERSA, { id: CONVERSA, a: DONO, b: ANA }]]),
     chamadasUsuario: 0,
   };
   const tratar = async (pedido, resposta) => {
@@ -66,6 +69,10 @@ function supabaseFalso() {
     if (url.pathname === '/rest/v1/exilados_salas') {
       const s = banco.salas.get(filtro('id'));
       return json(resposta, 200, s && ativo ? [s] : []);
+    }
+    if (url.pathname === '/rest/v1/exilados_conversas') {
+      const c = banco.conversas.get(filtro('id'));
+      return json(resposta, 200, c && ativo && [c.a, c.b].includes(eu) ? [c] : []);
     }
     if (url.pathname === '/rest/v1/rpc/exilados_definir_ativo') {
       if (banco.membros.get(eu)?.papel !== 'dono') return json(resposta, 400, { message: 'Só o dono do grupo pode fazer isso.' });
@@ -100,13 +107,19 @@ function supabaseFalso() {
 }
 
 function livekitFalso() {
-  const estado = { salas: ['sala-' + VOZ, 'sala-outra'], removidos: [], tokens: [] };
+  const estado = {
+    salas: ['sala-' + VOZ, 'sala-outra', 'conversa-' + CONVERSA], removidos: [], tokens: [],
+    participantes: { ['sala-' + VOZ]: [ANA], ['conversa-' + CONVERSA]: [DONO] },
+  };
   const tratar = async (pedido, resposta) => {
     const corpo = await corpoDe(pedido);
     const token = lerJwt(String(pedido.headers.authorization || '').replace('Bearer ', ''), SEGREDO_LK);
     if (!token) return json(resposta, 401, { code: 'unauthenticated', msg: 'token inválido' });
     estado.tokens.push(token);
     if (pedido.url.endsWith('/ListRooms')) return json(resposta, 200, { rooms: estado.salas.map((name) => ({ name })) });
+    if (pedido.url.endsWith('/ListParticipants')) {
+      return json(resposta, 200, { participants: (estado.participantes[corpo.room] || []).map((identity) => ({ identity })) });
+    }
     if (pedido.url.endsWith('/RemoveParticipant')) {
       if (corpo.room !== 'sala-' + VOZ || corpo.identity !== ANA) return json(resposta, 404, { code: 'not_found', msg: 'participant not found' });
       estado.removidos.push(`${corpo.room}/${corpo.identity}`);
@@ -117,7 +130,7 @@ function livekitFalso() {
   return { estado, tratar };
 }
 
-async function montar({ agora } = {}) {
+async function montar({ agora, gifs = null, buscarWeb } = {}) {
   const sb = supabaseFalso();
   const lk = livekitFalso();
   const mm = { leitores: [], expulsos: [] };
@@ -141,6 +154,9 @@ async function montar({ agora } = {}) {
     lives,
     mediamtx,
     config,
+    gifs,
+    ...(buscarWeb ? { buscarWeb } : {}),
+    segredoMidia: 'segredo-das-imagens',
     agora: () => relogio.t,
     registrar: (m) => erros.push(m),
   });
@@ -151,7 +167,8 @@ async function montar({ agora } = {}) {
       headers: { ...(quem ? { authorization: `Bearer t-${quem}` } : {}), 'content-type': 'application/json' },
       body: corpo === undefined ? undefined : JSON.stringify(corpo),
     });
-    return { status: resposta.status, dados: await resposta.json() };
+    const tipo = resposta.headers.get('content-type') || '';
+    return { status: resposta.status, tipo, dados: tipo.includes('json') ? await resposta.json() : Buffer.from(await resposta.arrayBuffer()) };
   };
   const fechar = () => { servSb.s.close(); servLk.s.close(); api.s.close(); };
   return { sb, lk, mm, lives, relogio, chamar, fechar, erros };
@@ -308,5 +325,88 @@ test('corpo inválido ou grande demais é recusado sem derrubar o serviço', asy
     const r = await t.chamar('POST', '/voz/entrar', { quem: ANA, corpo: { sala: VOZ, lixo: 'x'.repeat(5000) } });
     assert.equal(r.status, 413);
     assert.equal((await t.chamar('GET', '/saude')).status, 200);
+  } finally { t.fechar(); }
+});
+
+test('chamada na conversa direta: só os dois amigos recebem a permissão da sala da conversa', async () => {
+  const t = await montar();
+  try {
+    const r = await t.chamar('POST', '/voz/entrar', { quem: ANA, corpo: { conversa: CONVERSA } });
+    assert.equal(r.status, 200);
+    assert.equal(r.dados.sala, `conversa-${CONVERSA}`);
+    assert.equal(lerJwt(r.dados.token, SEGREDO_LK).video.room, `conversa-${CONVERSA}`);
+    t.sb.banco.membros.set(FORA, { user_id: FORA, nome: 'Outro', avatar: null, papel: 'membro', ativo: true });
+    const outro = await t.chamar('POST', '/voz/entrar', { quem: FORA, corpo: { conversa: CONVERSA } });
+    assert.equal(outro.status, 404);
+    assert.equal((await t.chamar('POST', '/voz/entrar', { quem: ANA, corpo: { conversa: 'x' } })).status, 400);
+  } finally { t.fechar(); }
+});
+
+test('presentes na voz: quem está em cada sala do grupo, sem as chamadas de conversa direta', async () => {
+  const t = await montar();
+  try {
+    const r = await t.chamar('POST', '/voz/presentes', { quem: ANA });
+    assert.equal(r.status, 200);
+    assert.deepEqual(r.dados.salas, { [VOZ]: [ANA] });
+  } finally { t.fechar(); }
+});
+
+test('prévia de link: monta, guarda e serve a imagem só com a assinatura certa', async () => {
+  const pedidos = [];
+  const PNG = Buffer.from('89504e470d0a1a0a', 'hex');
+  const buscarWeb = async (url) => {
+    pedidos.push(url);
+    if (url === 'https://exemplo.com/post') {
+      return {
+        status: 200, url, cortado: false, cabecalhos: { 'content-type': 'text/html; charset=utf-8' },
+        corpo: Buffer.from('<html><head><title>X</title><meta property="og:title" content="Título &amp; tal">'
+          + '<meta property="og:image" content="/foto.png"><meta property="og:site_name" content="Exemplo"></head></html>'),
+      };
+    }
+    if (url === 'https://exemplo.com/foto.png') return { status: 200, url, cortado: false, cabecalhos: { 'content-type': 'image/png' }, corpo: PNG };
+    if (url === 'https://exemplo.com/feio.svg') return { status: 200, url, cortado: false, cabecalhos: { 'content-type': 'image/svg+xml' }, corpo: Buffer.from('<svg/>') };
+    throw new Error('fora do ar');
+  };
+  const t = await montar({ buscarWeb });
+  try {
+    const r = await t.chamar('POST', '/previa', { quem: ANA, corpo: { url: 'https://exemplo.com/post' } });
+    assert.equal(r.status, 200);
+    assert.equal(r.dados.previa.titulo, 'Título & tal');
+    assert.equal(r.dados.previa.site, 'Exemplo');
+    assert.match(r.dados.previa.imagem, /^\/exilados\/api\/midia\?u=/);
+    await t.chamar('POST', '/previa', { quem: ANA, corpo: { url: 'https://exemplo.com/post' } });
+    assert.equal(pedidos.filter((u) => u === 'https://exemplo.com/post').length, 1, 'a segunda vez vem guardada');
+    const imagem = await t.chamar('GET', r.dados.previa.imagem.replace('/exilados/api', ''));
+    assert.equal(imagem.status, 200);
+    assert.equal(imagem.tipo, 'image/png');
+    assert.deepEqual(imagem.dados, PNG);
+    const forjada = await t.chamar('GET', `/midia?u=${encodeURIComponent('https://exemplo.com/feio.svg')}&a=AAAAAAAAAAAAAAAAAAAAAA`);
+    assert.equal(forjada.status, 404);
+    const fora = await t.chamar('POST', '/previa', { quem: ANA, corpo: { url: 'https://fora.com/' } });
+    assert.equal(fora.dados.previa, null);
+    assert.equal((await t.chamar('POST', '/previa', { quem: ANA, corpo: { url: 'file:///etc/passwd' } })).status, 400);
+    assert.equal((await t.chamar('POST', '/previa', { corpo: { url: 'https://exemplo.com/post' } })).status, 401);
+  } finally { t.fechar(); }
+});
+
+test('GIFs: desligados sem chave; com chave, lista e serve só imagens do Giphy', async () => {
+  const sem = await montar();
+  try {
+    assert.equal((await sem.chamar('GET', '/saude')).dados.gifs, false);
+    assert.equal((await sem.chamar('POST', '/gifs', { quem: ANA, corpo: {} })).status, 404);
+  } finally { sem.fechar(); }
+  const gifs = { ligado: true, listar: async (busca) => [{ id: '1', titulo: busca || 'popular', url: 'https://media1.giphy.com/media/1/giphy.webp', previa: 'https://media1.giphy.com/media/1/200w.webp', largura: 200, altura: 100 }] };
+  const servidos = [];
+  const buscarWeb = async (url) => { servidos.push(url); return { status: 200, url, cortado: false, cabecalhos: { 'content-type': 'image/webp' }, corpo: Buffer.from('RIFF') }; };
+  const t = await montar({ gifs, buscarWeb });
+  try {
+    assert.equal((await t.chamar('GET', '/saude')).dados.gifs, true);
+    const r = await t.chamar('POST', '/gifs', { quem: ANA, corpo: { busca: 'gato' } });
+    assert.equal(r.dados.gifs[0].titulo, 'gato');
+    const ok = await t.chamar('GET', `/gif?u=${encodeURIComponent('https://media1.giphy.com/media/1/200w.webp')}`);
+    assert.equal(ok.status, 200);
+    const fora = await t.chamar('GET', `/gif?u=${encodeURIComponent('https://exemplo.com/x.webp')}`);
+    assert.equal(fora.status, 404);
+    assert.deepEqual(servidos, ['https://media1.giphy.com/media/1/200w.webp']);
   } finally { t.fechar(); }
 });

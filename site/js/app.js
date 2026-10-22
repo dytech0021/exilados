@@ -6,9 +6,16 @@ import {
   abrirDM, aceitarAmizade, desenharAmigos, desenharListaDM, desenharTopoDM, iniciarAmigos, pedidosRecebidos, pedirAmizade,
 } from './amigos.js';
 import { BASE } from './config.js';
-import { blocoComeco, conversaAberta, fecharConversa, montarConversa, quandoClicarNoAutor } from './chat.js';
+import {
+  blocoComeco, conversaAberta, fecharConversa, montarConversa, quandoClicarNoAutor, usarChamadas, usarSalaDeVoz,
+} from './chat.js';
+import { barraDaChamada, iniciarChamadas, ligar } from './chamadas.js';
 import { abrirConfig, convidar } from './config-ui.js';
 import { carregarTudo, conectar, nomeDaSala } from './dados.js';
+import {
+  abriu, carregarLidas, chegou, mencoesEm,
+} from './lidas.js';
+import { notificarFora } from './nativo.js';
 import {
   agoraServidor, avisar, estado, meuId, nomeDe, ouvir,
 } from './estado.js';
@@ -95,11 +102,16 @@ function atualizarTrilho() {
   $('trilho-grupo').classList.toggle('ativo', estado.modo === 'grupo');
   const dmNaoLidas = [...estado.naoLidas].filter((id) => estado.conversas.has(id)).length + pedidosRecebidos().length;
   const grupoNaoLido = estado.salas.some((s) => estado.naoLidas.has(s.id));
+  const grupoMencoes = mencoesEm(estado.salas.map((s) => s.id));
   $('trilho-grupo').classList.toggle('nao-lido', grupoNaoLido && estado.modo !== 'grupo');
   const dm = $('trilho-dm');
   dm.querySelector('.selo')?.remove();
   if (dmNaoLidas) dm.append(el('span', { class: 'selo', text: String(dmNaoLidas) }));
-  const total = dmNaoLidas + (grupoNaoLido ? 1 : 0);
+  // Menções no grupo: número vermelho no ícone do grupo, como no Discord.
+  const grupo = $('trilho-grupo');
+  grupo.querySelector('.selo')?.remove();
+  if (grupoMencoes) grupo.append(el('span', { class: 'selo', text: String(grupoMencoes) }));
+  const total = dmNaoLidas + grupoMencoes + (grupoNaoLido && !grupoMencoes ? 1 : 0);
   document.title = total ? `(${total}) Exilados` : 'Exilados';
 }
 
@@ -153,7 +165,9 @@ function desenharCentro() {
     const c = estado.conversas.get(v.id);
     const outro = v.outro || (c && (c.a === meuId() ? c.b : c.a));
     const m = estado.membros.get(outro) || { user_id: outro, nome: 'Alguém' };
-    limpar(topo, botaoMenu(), el('div', { class: 'titulo' }, avatar(m, { tamanho: 24 }), el('span', { text: m.nome })), botaoMembros());
+    limpar(topo, botaoMenu(), el('div', { class: 'titulo' }, avatar(m, { tamanho: 24 }), el('span', { text: m.nome })),
+      botaoIcone('telefone', `Ligar para ${m.nome}`, () => ligar(v.id).catch((falha) => aviso(falha.message, { tipo: 'erro' })), 'botao-ligar'),
+      botaoMembros());
     montarConversa(partes.centro, {
       tipo: 'conversa',
       id: v.id,
@@ -187,7 +201,6 @@ function irPara(vista) {
   estado.vista = { ...vista };
   if (vista.tipo === 'grupo') estado.modo = 'grupo';
   if (vista.tipo === 'amigos' || vista.tipo === 'conversa') estado.modo = 'dm';
-  if (vista.id) estado.naoLidas.delete(vista.id);
   desenharLateral();
   desenharCentro();
   avisar('vista');
@@ -212,25 +225,30 @@ const nav = {
 
 function acompanhar() {
   ouvir('mensagem', (m) => {
-    if (m.autor === meuId()) return;
     const alvo = m.sala_id || m.conversa_id;
     const aberta = conversaAberta();
-    if (aberta?.id === alvo && !document.hidden) return;
-    estado.naoLidas.add(alvo);
-    avisar('naoLidas');
+    const vendo = aberta?.id === alvo && !document.hidden && aberta.colado;
+    const mencionado = chegou(m, { aberta: vendo });
     atualizarTrilho();
-    if (m.conversa_id && aberta?.id !== alvo) {
-      const resumo = m.texto ? (m.texto.length > 60 ? `${m.texto.slice(0, 60)}…` : m.texto) : 'mandou uma imagem';
-      aviso(`${nomeDe(m.autor)}: ${resumo}`, { acao: { rotulo: 'Abrir', fn: () => irPara({ tipo: 'conversa', id: m.conversa_id }) } });
+    if (m.autor === meuId() || vendo) return;
+    const resumo = m.chamada ? 'começou uma chamada'
+      : m.texto ? (m.texto.length > 80 ? `${m.texto.slice(0, 80)}…` : m.texto)
+        : m.gif ? 'mandou um GIF' : m.arquivo ? `mandou ${m.arquivo.nome}` : 'mandou uma imagem';
+    const ir = () => irPara(m.conversa_id ? { tipo: 'conversa', id: m.conversa_id } : { tipo: 'grupo', id: m.sala_id });
+    // Avisa mensagem direta e menção (o resto só acende a sala, como no Discord).
+    if (!m.conversa_id && !mencionado) return;
+    if (m.chamada) return; // a chamada tem o próprio aviso (toca)
+    const titulo = m.conversa_id ? nomeDe(m.autor) : `${nomeDe(m.autor)} em #${nomeDaSala(m.sala_id)}`;
+    if (aberta?.id !== alvo || document.hidden) {
+      aviso(`${titulo}: ${resumo}`, { tipo: mencionado ? 'mencao' : '', acao: { rotulo: 'Abrir', fn: ir } });
     }
+    notificarFora({ titulo, texto: resumo, alvo });
   });
   document.addEventListener('visibilitychange', () => {
     const aberta = conversaAberta();
-    if (!document.hidden && aberta && estado.naoLidas.delete(aberta.id)) {
-      avisar('naoLidas');
-      atualizarTrilho();
-    }
+    if (!document.hidden && aberta?.colado) abriu(aberta.id);
   });
+  ouvir('naoLidas', atualizarTrilho);
   ouvir('amizades', atualizarTrilho);
   ouvir('liveComecou', (live) => {
     if (!liveNoAr(live, agoraServidor())) return;
@@ -277,6 +295,7 @@ function acompanhar() {
 async function abrirApp() {
   $('carregando-texto').textContent = 'Carregando o grupo...';
   await carregarTudo();
+  await carregarLidas().catch(() => {});
   voz.preferencias();
   $('entrada').hidden = true;
   $('carregando').hidden = true;
@@ -289,6 +308,15 @@ async function abrirApp() {
   $('ir-grupo').addEventListener('click', () => irPara({ tipo: 'grupo', id: estado.vista.tipo === 'grupo' ? estado.vista.id : lembrada() }));
   botaoBaixar();
   iniciarGrupo(nav, partes);
+  usarChamadas({ barra: barraDaChamada, entrar: (conversa) => voz.entrar(`c:${conversa}`).catch((falha) => aviso(falha.message, { tipo: 'erro' })) });
+  usarSalaDeVoz(() => (voz.voz.situacao !== 'desligada' ? voz.voz.sala : null));
+  iniciarChamadas(nav);
+  // Clique numa notificação (app, programa ou navegador): abre a conversa ou a sala.
+  window.exiladosAbrir = (alvo) => {
+    if (estado.conversas.has(alvo)) irPara({ tipo: 'conversa', id: alvo });
+    else if (estado.salas.some((s) => s.id === alvo)) irPara({ tipo: 'grupo', id: alvo });
+  };
+  ouvir('reconectado', () => carregarLidas().catch(() => {}));
   iniciarAmigos(nav, partes);
   quandoClicarNoAutor((id, x, y) => cartaoPerfil(id, x, y));
   // No app do celular: na sala de voz, o app mantém a voz com a tela apagada (notificação "Na sala de voz").

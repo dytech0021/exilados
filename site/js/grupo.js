@@ -1,5 +1,5 @@
 // Coluna das salas (modo grupo), lista de membros, painel do usuário, painel de voz e cartão de perfil.
-import { nomeDaSala } from './dados.js';
+import { ehChamada, nomeDaSala, quemNaSala } from './dados.js';
 import {
   agoraServidor, amizadeCom, estado, eu, meuId, membrosAtivos, ouvir, souDono,
 } from './estado.js';
@@ -45,7 +45,7 @@ function itemSala(sala) {
   const ativa = estado.vista.tipo === 'grupo' && estado.vista.id === sala.id;
   const naSalaDeVoz = sala.tipo === 'voz' && voz.voz.sala === sala.id;
   const botao = el('button', {
-    class: `sala${ativa || naSalaDeVoz ? ' ativa' : ''}${estado.naoLidas.has(sala.id) ? ' nao-lida' : ''}`,
+    class: `sala${ativa || naSalaDeVoz ? ' ativa' : ''}${estado.naoLidas.has(sala.id) ? ' nao-lida' : ''}${estado.mencoes.get(sala.id) ? ' com-mencao' : ''}`,
     attrs: { 'aria-current': ativa ? 'page' : null },
     onclick: async () => {
       if (sala.tipo === 'texto') return nav.irPara({ tipo: 'grupo', id: sala.id });
@@ -55,11 +55,12 @@ function itemSala(sala) {
         erro(falha);
       }
     },
-  }, icone(sala.tipo === 'texto' ? 'hash' : 'voz'), el('span', { class: 'nome', text: sala.nome }));
+  }, icone(sala.tipo === 'texto' ? 'hash' : 'voz'), el('span', { class: 'nome', text: sala.nome }),
+  estado.mencoes.get(sala.id) ? el('span', { class: 'selo', text: String(estado.mencoes.get(sala.id)) }) : null);
   const partes = [botao];
   if (sala.tipo === 'voz') {
-    const ids = [...estado.presenca.entries()].filter(([, p]) => p.voz === sala.id).map(([id]) => id)
-      .filter((id) => estado.membros.get(id)?.ativo);
+    // Quem está na sala: a presença, corrigida pelo próprio servidor de voz (quem caiu sem avisar some).
+    const ids = quemNaSala(sala.id).filter((id) => estado.membros.get(id)?.ativo);
     if (ids.length) {
       const ordenados = ordenarPorNome(ids.map((id) => estado.membros.get(id)), (m) => m.nome).map((m) => m.user_id);
       partes.push(el('ul', { class: 'na-voz' }, ordenados.map((id) => itemNaVoz(id))));
@@ -71,7 +72,7 @@ function itemSala(sala) {
 export function desenharSalas(lista) {
   const textos = estado.salas.filter((s) => s.tipo === 'texto');
   const vozes = estado.salas.filter((s) => s.tipo === 'voz');
-  const emSalaDeVoz = new Set([...estado.presenca.values()].map((p) => p.voz).filter(Boolean));
+  const emSalaDeVoz = new Set([...estado.presenca.values()].map((p) => p.voz).filter((v) => v && !ehChamada(v)));
   // Lives de quem não está em nenhuma sala de voz aparecem numa seção própria.
   const livesSoltas = [...estado.lives.keys()].filter((id) => liveDe(id) && !emSalaDeVoz.has(estado.presenca.get(id)?.voz));
   const categoria = (texto, tipo) => el('div', { class: 'categoria' }, icone('abaixo'), el('span', { text: texto }),
@@ -111,6 +112,8 @@ export function desenharTopoGrupo(topo) {
 function atividade(id) {
   const live = liveDe(id);
   const salaVoz = estado.presenca.get(id)?.voz;
+  // Chamada de conversa direta: só diz que está numa chamada (com quem, só os dois sabem).
+  if (ehChamada(salaVoz)) return { texto: live ? 'Ao vivo, numa chamada' : 'Numa chamada', vivo: Boolean(live) };
   if (salaVoz && estado.presenca.get(id)?.tela) return { texto: `Compartilhando a tela na ${nomeDaSala(salaVoz)}`, vivo: true };
   if (live) return { texto: salaVoz ? `Ao vivo na ${nomeDaSala(salaVoz)}` : 'Ao vivo', vivo: true };
   if (salaVoz) return { texto: `Na sala ${nomeDaSala(salaVoz)}`, vivo: false };
@@ -316,7 +319,7 @@ export function iniciarGrupo(navegacao, partes) {
     if (estado.modo === 'grupo') desenharSalas(partes.lista);
     desenharMembros(partes.membros);
   };
-  for (const evento of ['salas', 'membros', 'presenca', 'falando', 'lives', 'vista', 'naoLidas', 'amizades']) ouvir(evento, redesenhar);
+  for (const evento of ['salas', 'membros', 'presenca', 'falando', 'lives', 'vista', 'naoLidas', 'amizades', 'conversas']) ouvir(evento, redesenhar);
   ouvir('voz', () => {
     redesenhar();
     desenharPainelVoz(partes.painelVoz);

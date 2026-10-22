@@ -95,10 +95,14 @@ export function desenharListaDM(lista) {
       const conversa = conversaCom(m.user_id);
       const ativa = estado.vista.tipo === 'conversa' && conversa && estado.vista.id === conversa.id;
       const naoLida = conversa && estado.naoLidas.has(conversa.id);
+      const mencoes = conversa ? estado.mencoes.get(conversa.id) || 0 : 0;
+      const emChamada = conversa && [...estado.presenca.values()].some((p) => p.voz === `c:${conversa.id}`);
       return el('button', {
         class: `sala${ativa ? ' ativa' : ''}${naoLida ? ' nao-lida' : ''}`,
         onclick: () => abrirDM(m.user_id),
-      }, avatar(m, { tamanho: 32, status: statusDe(m.user_id) }), el('span', { class: 'nome', text: m.nome }));
+      }, avatar(m, { tamanho: 32, status: statusDe(m.user_id) }), el('span', { class: 'nome', text: m.nome }),
+      emChamada ? icone('telefone', 'em-chamada') : null,
+      mencoes ? el('span', { class: 'selo', text: String(mencoes) }) : null);
     }) : el('p', { class: 'ajuda', text: 'Seus amigos aparecem aqui. Adicione alguém do grupo na página Amigos.' }));
 }
 

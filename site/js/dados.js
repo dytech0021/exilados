@@ -1,7 +1,9 @@
 // Dados do grupo: carga inicial, mudanças em tempo real (respeitam as regras de acesso de quem assina) e o canal
-// privado "exilados" (presença e quem está falando).
-import { avisar, estado, meuId, nomeDe } from './estado.js';
+// privado "exilados" (presença, quem está falando, quem está digitando e o toque das chamadas).
+import { avisar, estado, meuId, nomeDe, outroDaConversa } from './estado.js';
+import { lidaEmOutroLugar } from './lidas.js';
 import { LimitadorFala, liveNoAr, resumirPresenca, vigiarAusencia } from './presenca.js';
+import { API } from './config.js';
 import { api, conferir, sb } from './supa.js';
 import { preparar } from './ui.js';
 
@@ -92,6 +94,12 @@ function assinarMudancas() {
       avisar('conversas');
     })
     .on('postgres_changes', tabela('exilados_mensagens', 'INSERT'), (m) => avisar('mensagem', m.new))
+    .on('postgres_changes', tabela('exilados_mensagens', 'UPDATE'), (m) => avisar('mensagemMudou', m.new))
+    .on('postgres_changes', tabela('exilados_mensagens', 'DELETE'), (m) => avisar('mensagemApagada', m.old?.id))
+    .on('postgres_changes', tabela('exilados_reacoes'), (m) => avisar('reacao', {
+      tirada: m.eventType === 'DELETE', linha: m.eventType === 'DELETE' ? m.old : m.new,
+    }))
+    .on('postgres_changes', tabela('exilados_lidas'), (m) => { if (m.eventType !== 'DELETE') lidaEmOutroLugar(m.new); })
     .subscribe(async (situacao) => {
       if (situacao === 'SUBSCRIBED') {
         if (caiu) {
@@ -134,6 +142,20 @@ function assinarGrupo() {
       }
       avisar('presenca');
     })
+    .on('broadcast', { event: 'digitando' }, ({ payload }) => {
+      if (!payload?.id || !payload.alvo || payload.id === meuId()) return;
+      if (!estado.digitando.has(payload.alvo)) estado.digitando.set(payload.alvo, new Map());
+      const quem = estado.digitando.get(payload.alvo);
+      if (payload.parou) quem.delete(payload.id);
+      else quem.set(payload.id, Date.now() + 7000);
+      avisar('digitando', payload.alvo);
+    })
+    .on('broadcast', { event: 'chamada' }, ({ payload }) => {
+      // Só o que é para mim (o canal é do grupo inteiro).
+      if (!payload?.de || payload.para !== meuId() || !estado.conversas.has(payload.conversa)) return;
+      if (outroDaConversa(payload.conversa) !== payload.de) return;
+      avisar('chamada', payload);
+    })
     .on('broadcast', { event: 'falando' }, ({ payload }) => {
       if (!payload?.id) return;
       if (payload.falando) estado.falando.add(payload.id);
@@ -166,11 +188,83 @@ export function avisarQueFalo(falando) {
   limitador.atualizar(falando);
 }
 
+let ultimoDigitando = { alvo: null, quando: 0 };
+
+/** Estou escrevendo em `alvo` (vai aos outros no máximo a cada 3 s); `parou` quando a caixa fica vazia ou envia. */
+export function avisarDigitando(alvo, parou = false) {
+  const agora = Date.now();
+  if (!parou && ultimoDigitando.alvo === alvo && agora - ultimoDigitando.quando < 3000) return;
+  if (parou && ultimoDigitando.alvo !== alvo) return;
+  ultimoDigitando = parou ? { alvo: null, quando: 0 } : { alvo, quando: agora };
+  canalGrupo?.send({ type: 'broadcast', event: 'digitando', payload: { id: meuId(), alvo, parou } }).catch(() => {});
+}
+
+/** Quem está digitando em `alvo` agora (sem mim). */
+export function quemDigita(alvo) {
+  const quem = estado.digitando.get(alvo);
+  if (!quem) return [];
+  const agora = Date.now();
+  for (const [id, ate] of quem) if (ate < agora) quem.delete(id);
+  return [...quem.keys()];
+}
+
+/** Aviso de chamada para o outro da conversa: tocar, parar, atender ou recusar. */
+export function enviarChamada(conversa, acao) {
+  const para = outroDaConversa(conversa);
+  if (!para) return;
+  canalGrupo?.send({ type: 'broadcast', event: 'chamada', payload: { de: meuId(), para, conversa, acao } }).catch(() => {});
+}
+
+// Quem está mesmo em cada sala de voz, pelo LiveKit (a presença de quem caiu sem avisar pode ficar para trás).
+async function acompanharVozServidor() {
+  if (document.hidden) return;
+  try {
+    const { salas } = await api.chamar('/voz/presentes');
+    estado.vozServidor = { quando: Date.now(), salas: salas || {} };
+    avisar('presenca');
+  } catch {
+    // Sem o servidor, vale a presença.
+  }
+}
+
+/** Quem mostrar numa sala de voz: a presença, corrigida pelo LiveKit quando se sabe (até 40 s de idade). */
+export function quemNaSala(salaId) {
+  const pelaPresenca = [...estado.presenca.entries()].filter(([, p]) => p.voz === salaId);
+  const servidor = estado.vozServidor;
+  if (!servidor || Date.now() - servidor.quando > 40000) return pelaPresenca.map(([id]) => id);
+  const noServidor = new Set(servidor.salas[salaId] || []);
+  const ids = new Set();
+  for (const [id, p] of pelaPresenca) {
+    // Quem acabou de entrar pode ainda não aparecer no LiveKit; quem saiu sem avisar some.
+    if (noServidor.has(id) || id === meuId() || Date.now() - (p.desde || 0) < 30000) ids.add(id);
+  }
+  for (const id of noServidor) {
+    const p = estado.presenca.get(id);
+    if (!p?.voz || p.voz === salaId) ids.add(id);
+  }
+  return [...ids];
+}
+
+async function lerRecursos() {
+  try {
+    const resposta = await fetch(`${API}/saude`, { cache: 'no-store' });
+    const dados = await resposta.json();
+    estado.recursos = { gifs: Boolean(dados.gifs) };
+    avisar('recursos');
+  } catch {
+    // Sem o servidor agora: sem GIFs até a próxima vez.
+  }
+}
+
 export async function conectar() {
   await sb.realtime.setAuth().catch(() => {});
   await acertarRelogio();
   assinarMudancas();
   assinarGrupo();
+  lerRecursos();
+  acompanharVozServidor();
+  setInterval(acompanharVozServidor, 15000);
+  document.addEventListener('visibilitychange', () => { if (!document.hidden) acompanharVozServidor(); });
   vigiarAusencia((ausente) => atualizarPresenca({ status: ausente ? 'ausente' : 'online' }));
   setInterval(acertarRelogio, 10 * 60 * 1000);
   // As lives "envelhecem" sem mudança no banco (sinal parado): reavalia a cada 5 s.
@@ -187,8 +281,16 @@ export async function conectar() {
   window.addEventListener('offline', () => mudarConexao(false));
 }
 
+/** Nome da sala de voz, ou "Chamada com Fulano" para a chamada de uma conversa direta ("c:<id da conversa>"). */
 export function nomeDaSala(id) {
+  if (String(id || '').startsWith('c:')) {
+    const outro = outroDaConversa(id.slice(2));
+    return outro ? `Chamada com ${nomeDe(outro)}` : 'Chamada';
+  }
   return estado.salas.find((s) => s.id === id)?.nome || 'sala';
 }
+
+/** A sala de voz é uma chamada de conversa direta. */
+export const ehChamada = (id) => String(id || '').startsWith('c:');
 
 export { nomeDe };

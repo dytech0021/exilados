@@ -43,6 +43,8 @@ class MainActivity : Activity() {
     private var salaDaVoz: String? = null
     /** Há live ou tela compartilhada na tela (o site avisa): ao sair do app, ele vira janela flutuante. */
     private var comVideo = false
+    /** O app está na frente: os avisos de mensagem e chamada ficam só dentro do site. */
+    @Volatile private var naFrente = false
     private val login by lazy { LoginGoogle(this) }
     private val atualizacao by lazy { AtualizacaoApp(this) }
 
@@ -75,6 +77,12 @@ class MainActivity : Activity() {
 
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
+        // Tocou num aviso de mensagem ou chamada: abre a conversa no site (sem recarregar: a voz continua).
+        intent.getStringExtra(Avisos.EXTRA_ALVO)?.takeIf { Regex("^[0-9a-f-]{36}$").matches(it) }?.let { alvo ->
+            Avisos.limpar(this, alvo)
+            web.evaluateJavascript("window.exiladosAbrir && window.exiladosAbrir('$alvo')", null)
+            return
+        }
         // Um link do Exilados (convite) aberto com o app já aberto; "exilados://abrir" só traz o app para a frente.
         intent.dataString?.takeIf { Enderecos.doSite(it) }?.let { web.loadUrl(it) }
     }
@@ -87,10 +95,12 @@ class MainActivity : Activity() {
     // A página não é pausada ao sair da tela (sem web.onPause): a voz e as lives seguem com a tela apagada.
     override fun onResume() {
         super.onResume()
+        naFrente = true
         atualizacao.aoVoltar()
     }
 
     override fun onPause() {
+        naFrente = false
         atualizacao.aoSair()
         super.onPause()
     }
@@ -272,13 +282,23 @@ class MainActivity : Activity() {
         override fun onHideCustomView() = sairDaTelaCheia()
     }
 
-    /** O que o site chama (window.ExiladosAndroid): entrou ou saiu de uma sala de voz. */
+    /** O que o site chama (window.ExiladosAndroid): sala de voz, vídeo na tela e avisos de mensagem e chamada. */
     private inner class Ponte {
         @JavascriptInterface
         fun voz(ligada: Boolean, sala: String) = runOnUiThread {
             salaDaVoz = if (ligada) sala else null
             if (ligada) VozServico.iniciar(this@MainActivity, sala, temMicrofone()) else VozServico.parar(this@MainActivity)
         }
+
+        /** Aviso de mensagem ("mensagem") ou chamada ("chamada"); com o app na frente, o site já mostrou. */
+        @JavascriptInterface
+        fun notificar(titulo: String, texto: String, tipo: String, alvo: String) {
+            if (naFrente) return
+            Avisos.mostrar(this@MainActivity, titulo, texto, tipo == "chamada", alvo)
+        }
+
+        @JavascriptInterface
+        fun pararChamada() = Avisos.pararChamada(this@MainActivity)
 
         @JavascriptInterface
         fun video(sim: Boolean) = runOnUiThread {

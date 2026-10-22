@@ -71,6 +71,12 @@ const ICONES = {
   removerPessoa: T('M10 11.5a4 4 0 1 0 0-8 4 4 0 0 0 0 8zM3 21c0-4 3.1-6.5 7-6.5 1.6 0 3 .4 4.2 1.2M16 15.5l5 5M21 15.5l-5 5'),
   baixar: T('M12 4v11M7 10.5l5 5 5-5M5 20h14'),
   celular: T('M8 2.5h8A1.5 1.5 0 0 1 17.5 4v16a1.5 1.5 0 0 1-1.5 1.5H8A1.5 1.5 0 0 1 6.5 20V4A1.5 1.5 0 0 1 8 2.5zM11 18.5h2'),
+  telefone: F('M6.6 3.2c.5-.5 1.3-.5 1.8 0l2.3 2.3c.5.5.5 1.3 0 1.8L9.3 8.7a12 12 0 0 0 6 6l1.4-1.4c.5-.5 1.3-.5 1.8 0l2.3 2.3c.5.5.5 1.3 0 1.8l-1.5 1.5c-1 1-2.6 1.3-3.9.7A20 20 0 0 1 4.4 8.6c-.6-1.3-.3-2.9.7-3.9z'),
+  responder: T('M10 8 5 12.5l5 4.5M5.5 12.5H14a5 5 0 0 1 5 5V19'),
+  emoji: '<circle cx="12" cy="12" r="9" fill="none" stroke="currentColor" stroke-width="2"/>' + T('M8.5 14.5a4.5 4.5 0 0 0 7 0') + '<circle cx="9" cy="10" r="1.3"/><circle cx="15" cy="10" r="1.3"/>',
+  gif: T('M3.5 5.5h17v13h-17z', 1.8) + '<text x="12" y="15.5" text-anchor="middle" font-size="7.5" font-weight="700" font-family="sans-serif" fill="currentColor">GIF</text>',
+  clipe: T('M20 11.5 12 19.5a5 5 0 0 1-7-7l8.5-8.5a3.3 3.3 0 0 1 4.7 4.7L9.7 17a1.7 1.7 0 0 1-2.4-2.4l7.6-7.6'),
+  arquivo: T('M6 3h8l4 4v14H6zM14 3v4h4M9 12h6M9 16h6'),
   ondas: T('M5.5 8.5a9 9 0 0 0 0 7M8.5 10.5a4 4 0 0 0 0 3M18.5 8.5a9 9 0 0 1 0 7M15.5 10.5a4 4 0 0 1 0 3') + '<circle cx="12" cy="12" r="1.8"/>',
 };
 
@@ -90,6 +96,19 @@ export function botaoIcone(nomeIcone, rotulo, aoClicar, classe = '') {
 // ---------- imagens guardadas no Supabase (pasta privada: endereços assinados por 1 hora) ----------
 
 const enderecos = new Map();
+
+/** Endereço assinado (1 hora) de um arquivo da pasta "exilados-arquivos" (vídeos, áudios e outros anexos). */
+export async function enderecoArquivo(caminho) {
+  if (!caminho) return null;
+  const chave = `arquivos:${caminho}`;
+  const guardado = enderecos.get(chave);
+  if (guardado && guardado.ate > Date.now()) return guardado.promessa;
+  const promessa = sb.storage.from('exilados-arquivos').createSignedUrl(caminho, 3600)
+    .then(({ data, error }) => (error ? null : data.signedUrl))
+    .catch(() => null);
+  enderecos.set(chave, { promessa, ate: Date.now() + 50 * 60 * 1000 });
+  return promessa;
+}
 
 export async function enderecoImagem(caminho) {
   if (!caminho) return null;

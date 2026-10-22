@@ -10,6 +10,12 @@ export const estado = {
   amizades: [], // linhas de exilados_amizades em que eu estou
   conversas: new Map(), // id -> { id, a, b }
   naoLidas: new Set(), // ids de salas e conversas com mensagem nova
+  mencoes: new Map(), // sala ou conversa -> quantas mensagens novas me mencionam
+  ultimas: new Map(), // sala ou conversa -> id da última mensagem que se conhece
+  lidas: new Map(), // sala ou conversa -> até que mensagem eu li (exilados_lidas)
+  digitando: new Map(), // sala ou conversa -> Map(user_id -> até quando mostrar "digitando")
+  vozServidor: null, // { quando, salas: { salaId: [user_id] } } pelo LiveKit, ou null se não se sabe
+  recursos: { gifs: false }, // o que o servidor oferece
   vista: { tipo: 'grupo', id: null }, // tipo: grupo (sala de texto) | amigos | conversa | live
   modo: 'grupo', // o que a coluna da esquerda mostra: grupo | dm
   diferencaRelogio: 0, // relógio do servidor - relógio daqui (ms)
@@ -56,6 +62,13 @@ export function amizadeCom(id) {
 export function amigos() {
   const meu = meuId();
   return estado.amizades.filter((a) => a.estado === 'aceita').map((a) => (a.de === meu ? a.para : a.de));
+}
+
+/** O outro da conversa direta `conversaId`, ou null. */
+export function outroDaConversa(conversaId) {
+  const c = estado.conversas.get(conversaId);
+  if (!c) return null;
+  return c.a === meuId() ? c.b : c.a;
 }
 
 export function conversaCom(id) {

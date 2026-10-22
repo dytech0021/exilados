@@ -17,7 +17,7 @@ Como o Exilados está montado, como publicar cada parte e como conferir que est�
 Servidor: Ubuntu 24.04 (177.153.35.193), o mesmo do FilaBox e do relay do Ponte. Acesso como root com a chave
 `~/.ssh/filabox3d_deploy_ed25519` e `UserKnownHostsFile=~/.ssh/filabox3d_known_hosts`.
 
-Segredos, só no servidor: `/etc/exilados/api.env` (chave e segredo do LiveKit, segredo das lives) e
+Segredos, só no servidor: `/etc/exilados/api.env` (chave e segredo do LiveKit, segredo das lives, chave do Giphy) e
 `/etc/exilados/livekit.yaml`, os dois gerados pelo `instalar.sh` na primeira vez (0600, root).
 
 ## 2. Publicar
@@ -66,13 +66,14 @@ teria de desinstalar e instalar de novo.
 ### 2.4 Banco
 
 Mudanças no banco vão em arquivos novos em `banco/` (`003_...sql`), aplicados pelo editor de SQL do Supabase, cada
-um com o seu teste (`testes.sql` para o `001`, `testes_002.sql` para o `002`). Os testes usam contas simuladas e desfazem
+um com o seu teste (`testes.sql` para o `001`, `testes_002.sql` para o `002`, `testes_003.sql` para o `003`). Os testes usam contas simuladas e desfazem
 tudo no fim (terminam com `RESULTADO: tudo certo`).
 
 | Migração | O que traz |
 |---|---|
 | `001_exilados.sql` | Tabelas, regras de acesso, convites, salas, amizades, mensagens, lives, imagens e tempo real. |
 | `002_ids.sql` | ID de 9 dígitos de cada conta (`exilados_meu_id`) e entrar no grupo pelo ID (`exilados_adicionar_por_id`): qualquer membro adiciona; quem o dono removeu só volta pelo dono. |
+| `003_conversa.sql` | Conversa como no Discord: editar e apagar (o dono apaga nas salas), responder, reações (`exilados_reacoes`), menções e `@todos`, o que cada um leu (`exilados_lidas`, `exilados_nao_lidas`, `exilados_marcar_lida`), arquivos até 25 MB (pasta `exilados-arquivos`), GIFs e o aviso de chamada nas conversas diretas. O site novo só funciona com ela aplicada. |
 
 O dono e as salas iniciais foram criados por um comando avulso (fora do repositório, porque tem o e-mail):
 

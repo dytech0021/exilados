@@ -72,6 +72,12 @@ export class Supabase {
     return Array.isArray(linhas) && linhas.length ? linhas[0] : null;
   }
 
+  /** A conversa direta, se a pessoa faz parte dela e ainda é amiga do outro (as regras do banco decidem). */
+  async conversa(token, id) {
+    const linhas = await this.#pedir(token, `/rest/v1/exilados_conversas?id=eq.${encodeURIComponent(id)}&select=id,a,b`);
+    return Array.isArray(linhas) && linhas.length ? linhas[0] : null;
+  }
+
   async rpc(token, nome, args) {
     return this.#pedir(token, `/rest/v1/rpc/${nome}`, { method: 'POST', body: args ?? {} });
   }

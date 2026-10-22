@@ -284,11 +284,63 @@ internal sealed class JanelaPrincipal : Form
             case "atualizar":
                 _ = _bandeja.AtualizarAgoraAsync();
                 break;
+            // Mensagem direta, menção ou chamada: aviso perto do relógio (e, na chamada, a janela vem para a frente).
+            case "notificar":
+                string Texto(string nome) => mensagem.TryGetProperty(nome, out var v) && v.ValueKind == JsonValueKind.String ? v.GetString() ?? "" : "";
+                bool chamada = mensagem.TryGetProperty("chamada", out var c) && c.ValueKind == JsonValueKind.True;
+                _bandeja.Notificar(Texto("titulo"), Texto("texto"), Texto("alvo"), chamada);
+                break;
+            case "pararChamada":
+                PararDePiscar();
+                break;
             case "resposta" when mensagem.TryGetProperty("id", out var id) && id.TryGetInt32(out int numero) && _pedidos.Remove(numero, out var pedido):
                 pedido.TrySetResult(mensagem);
                 break;
         }
     }
+
+    /// <summary>A pessoa está olhando para o Exilados agora (janela à vista e com o foco).</summary>
+    public bool EmUso => Visible && WindowState != FormWindowState.Minimized && ContainsFocus;
+
+    /// <summary>Abre a conversa ou a sala `alvo` no site (clique no aviso).</summary>
+    public void AbrirNoSite(string alvo)
+    {
+        if (IsDisposed || _web.CoreWebView2 is not { } web || !Guid.TryParse(alvo, out _)) return;
+        try { web.PostWebMessageAsJson(JsonSerializer.Serialize(new { tipo = "abrir", alvo })); }
+        catch (Exception ex) when (ex is InvalidOperationException or ObjectDisposedException or COMException) { }
+    }
+
+    /// <summary>Chamada chegando: a janela aparece e pisca na barra de tarefas até alguém olhar.</summary>
+    public void ChamarAtencao()
+    {
+        if (!Visible) Show();
+        if (WindowState == FormWindowState.Minimized) WindowState = _bandeja.Configuracao.JanelaMaximizada ? FormWindowState.Maximized : FormWindowState.Normal;
+        Piscar(FLASHW_ALL | FLASHW_TIMERNOFG, 0);
+    }
+
+    private void PararDePiscar() => Piscar(FLASHW_STOP, 0);
+
+    private void Piscar(uint jeito, uint vezes)
+    {
+        if (!IsHandleCreated) return;
+        var info = new FLASHWINFO { cbSize = (uint)Marshal.SizeOf<FLASHWINFO>(), hwnd = Handle, dwFlags = jeito, uCount = vezes, dwTimeout = 0 };
+        FlashWindowEx(ref info);
+    }
+
+    private const uint FLASHW_STOP = 0, FLASHW_ALL = 3, FLASHW_TIMERNOFG = 12;
+
+    [StructLayout(LayoutKind.Sequential)]
+    private struct FLASHWINFO
+    {
+        public uint cbSize;
+        public IntPtr hwnd;
+        public uint dwFlags;
+        public uint uCount;
+        public uint dwTimeout;
+    }
+
+    [DllImport("user32.dll")]
+    private static extern bool FlashWindowEx(ref FLASHWINFO info);
 
     /// <summary>Conta ao site se há versão nova pronta (a setinha verde). Também a cada vez que o site carrega.</summary>
     public void AvisarAtualizacao()

@@ -462,6 +462,7 @@ function montarEventos(LKC, room) {
     });
 }
 
+/** Entra numa sala de voz do grupo, ou na chamada de uma conversa direta (`c:<id da conversa>`). */
 export async function entrar(salaId) {
   preferencias();
   if (voz.sala === salaId && voz.situacao !== 'desligada') return;
@@ -476,7 +477,7 @@ export async function entrar(salaId) {
     let LKC;
     let permissao;
     try {
-      [LKC, permissao] = await Promise.all([carregarLiveKit(), api.chamar('/voz/entrar', { sala: salaId })]);
+      [LKC, permissao] = await Promise.all([carregarLiveKit(), api.chamar('/voz/entrar', String(salaId).startsWith('c:') ? { conversa: salaId.slice(2) } : { sala: salaId })]);
     } catch (erro) {
       const { mic } = await preparo;
       fecharMicrofone(mic);
