@@ -114,14 +114,23 @@ grant insert (mensagem_id, user_id, emoji) on public.exilados_reacoes to authent
 drop policy if exists exilados_reacoes_ler on public.exilados_reacoes;
 create policy exilados_reacoes_ler on public.exilados_reacoes for select to authenticated
   using (exists (select 1 from public.exilados_mensagens m where m.id = mensagem_id));
+-- Quantos emojis diferentes (fora `emoji`) a mensagem já tem. Roda como o dono da tabela: uma regra de acesso que
+-- consultasse a própria tabela de reações cairia em recursão.
+create or replace function public.exilados_outros_emojis(mensagem bigint, emoji text) returns integer
+language sql stable security definer set search_path = '' as $$
+  select count(distinct r.emoji)::integer from public.exilados_reacoes r
+  where r.mensagem_id = mensagem and r.emoji <> exilados_outros_emojis.emoji;
+$$;
+revoke all on function public.exilados_outros_emojis(bigint, text) from public, anon;
+grant execute on function public.exilados_outros_emojis(bigint, text) to authenticated;
+
 -- Reagir em nome próprio, a uma mensagem que vê, com no máximo 20 emojis diferentes por mensagem.
 drop policy if exists exilados_reacoes_reagir on public.exilados_reacoes;
 create policy exilados_reacoes_reagir on public.exilados_reacoes for insert to authenticated
   with check (
     public.exilados_e_membro() and user_id = (select auth.uid())
     and exists (select 1 from public.exilados_mensagens m where m.id = mensagem_id)
-    and (select count(distinct r.emoji) from public.exilados_reacoes r where r.mensagem_id = exilados_reacoes.mensagem_id
-         and r.emoji <> exilados_reacoes.emoji) < 20
+    and public.exilados_outros_emojis(mensagem_id, emoji) < 20
   );
 drop policy if exists exilados_reacoes_tirar on public.exilados_reacoes;
 create policy exilados_reacoes_tirar on public.exilados_reacoes for delete to authenticated
