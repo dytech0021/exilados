@@ -27,7 +27,7 @@ import {
 } from './programa.js';
 import { NOME_COM_VERSAO, vigiarVersao } from './atualizacao-site.js';
 import { conferir, sb } from './supa.js';
-import { fecharTela, montarTela } from './tela.js';
+import { fecharTela, montarTela, telasAbertas } from './tela.js';
 import {
   avatar, aviso, botaoIcone, confirmar, el, icone, janela, limpar,
 } from './ui.js';
@@ -150,13 +150,19 @@ function desenharCentro() {
     return;
   }
   if (v.tipo === 'tela') {
-    const m = estado.membros.get(v.id) || { user_id: v.id, nome: 'Alguém' };
-    const salaVoz = estado.presenca.get(v.id)?.voz;
-    limpar(topo, botaoMenu(),
-      el('div', { class: 'titulo' }, avatar(m, { tamanho: 24 }), el('span', { text: v.id === meuId() ? 'Sua tela' : m.nome }),
-        el('span', { class: 'ao-vivo', text: 'Ao vivo' }), salaVoz ? el('span', { class: 'sub', text: nomeDaSala(salaVoz) }) : null),
-      botaoMembros(), botaoIcone('fechar', 'Fechar a transmissão', voltar));
-    montarTela(partes.centro, v.id, voltar);
+    // Uma tela: o nome de quem transmite; várias lado a lado: quantas são.
+    const titulo = el('div', { class: 'titulo' });
+    const desenharTitulo = (ids) => {
+      const um = ids.length === 1 ? ids[0] : null;
+      const m = um && (estado.membros.get(um) || { user_id: um, nome: 'Alguém' });
+      const salaVoz = estado.presenca.get(ids[0])?.voz;
+      limpar(titulo, um ? avatar(m, { tamanho: 24 }) : icone('tela'),
+        el('span', { text: um ? (um === meuId() ? 'Sua tela' : m.nome) : `${ids.length} transmissões` }),
+        el('span', { class: 'ao-vivo', text: 'Ao vivo' }), salaVoz ? el('span', { class: 'sub', text: nomeDaSala(salaVoz) }) : null);
+    };
+    desenharTitulo([v.id]);
+    limpar(topo, botaoMenu(), titulo, botaoMembros(), botaoIcone('fechar', 'Fechar as transmissões', voltar));
+    montarTela(partes.centro, v.id, voltar, desenharTitulo);
     return;
   }
   if (v.tipo === 'amigos') {
@@ -262,7 +268,7 @@ function acompanhar() {
   });
   ouvir('telaComecou', (id) => {
     const salaVoz = estado.presenca.get(id)?.voz;
-    if (!salaVoz || (estado.vista.tipo === 'tela' && estado.vista.id === id)) return;
+    if (!salaVoz || (estado.vista.tipo === 'tela' && telasAbertas().includes(id))) return;
     aviso(`${nomeDe(id)} está compartilhando a tela na ${nomeDaSala(salaVoz)}`, {
       tipo: 'vivo',
       duracao: 12000,

@@ -11,9 +11,18 @@ test('online se alguma aba está online; sala de voz da aba que entrou por últi
   });
   assert.deepEqual(resumo.get('a'), { status: 'online', voz: 's1', mudo: true, surdo: false, tela: true, assistindo: null });
   assert.deepEqual(resumo.get('b'), { status: 'ausente', voz: null, mudo: false, surdo: false, tela: false, assistindo: null });
-  assert.deepEqual(resumo.get('c'), { status: 'online', voz: 's2', mudo: false, surdo: true, tela: false, assistindo: 'a' });
   assert.equal(resumo.has('d'), false);
   assert.equal(contarAssistindo(resumo, 'a'), 1);
+  assert.equal(contarAssistindo(resumo, 'c'), 0);
+});
+
+test('quem assiste a várias telas conta para cada uma', () => {
+  const resumo = new Map([
+    ['a', { assistindo: null }], ['b', { assistindo: null }],
+    ['c', { assistindo: ['a', 'b'] }], ['d', { assistindo: 'a' }], ['e', { assistindo: ['b'] }],
+  ]);
+  assert.equal(contarAssistindo(resumo, 'a'), 2);
+  assert.equal(contarAssistindo(resumo, 'b'), 2);
   assert.equal(contarAssistindo(resumo, 'c'), 0);
 });
 

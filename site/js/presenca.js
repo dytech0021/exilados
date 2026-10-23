@@ -27,10 +27,13 @@ export function resumirPresenca(estado) {
   return resumo;
 }
 
-/** Quantos estão assistindo à tela de `id` (pela presença). */
+/** Quantos estão assistindo à tela de `id` (pela presença; quem assiste a várias manda a lista). */
 export function contarAssistindo(resumo, id) {
   let n = 0;
-  for (const [quem, p] of resumo) if (quem !== id && p.assistindo === id) n += 1;
+  for (const [quem, p] of resumo) {
+    const assiste = Array.isArray(p.assistindo) ? p.assistindo.includes(id) : p.assistindo === id;
+    if (quem !== id && assiste) n += 1;
+  }
   return n;
 }
 

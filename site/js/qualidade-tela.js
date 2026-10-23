@@ -13,7 +13,13 @@ export function opcoesPublicacaoTela(LK, q) {
   };
 }
 
-export function qualidadeRecebida(LK, celular, temCamadas) {
+/**
+ * Camada pedida ao servidor. Com várias telas abertas lado a lado, cada uma vem em 720p (a de tela cheia, `destaque`,
+ * na máxima): com o dynacast, quem transmite nem envia o 1080p que ninguém está vendo grande.
+ */
+export function qualidadeRecebida(LK, celular, temCamadas, { varias = false, destaque = false } = {}) {
   // Quem ainda transmite com uma única camada precisa continuar recebível até reiniciar a live.
-  return celular && temCamadas ? LK.VideoQuality.LOW : LK.VideoQuality.HIGH;
+  if (!temCamadas) return LK.VideoQuality.HIGH;
+  if (celular) return LK.VideoQuality.LOW;
+  return varias && !destaque ? LK.VideoQuality.MEDIUM : LK.VideoQuality.HIGH;
 }

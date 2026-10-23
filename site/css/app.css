@@ -170,6 +170,8 @@ svg.icone { width: 20px; height: 20px; flex: none; fill: currentColor; display: 
 body.modo-pip .centro-corpo .live { position: fixed; inset: 0; z-index: 1000; margin: 0; border-radius: 0; background: #000; }
 body.modo-pip .centro-corpo .live > :not(video) { display: none !important; }
 body.modo-pip .centro-corpo .live video { width: 100%; height: 100%; object-fit: contain; }
+/* Na janela flutuante do celular, com várias telas abertas, fica só a primeira. */
+body.modo-pip .centro-corpo .quadro-tela:not(:first-child) { display: none !important; }
 body.modo-pip #avisos, body.modo-pip .fundo-modal, body.modo-pip .configuracoes { display: none !important; }
 .qr-celular { text-align: center; }
 .qr-celular .qr { width: 220px; max-width: 100%; margin: 4px auto 16px; }
@@ -427,6 +429,38 @@ button.ao-vivo:hover { background: var(--vermelho-escuro); }
 .live .barra .controles-som { display: flex; align-items: center; gap: 12px; }
 .live .barra .controles-som[hidden] { display: none; }
 .live .barra .rotulo { font-size: 14px; color: rgba(255, 255, 255, .85); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
+/* Telas compartilhadas: uma ou várias lado a lado (com 3, a primeira grande à esquerda; no celular, empilhadas). */
+.telas { flex: 1; min-height: 0; display: flex; flex-direction: column; background: #000; }
+.telas-grade {
+  flex: 1; min-height: 0; display: grid; gap: 4px; padding: 4px;
+  grid-template-columns: minmax(0, 1fr); grid-auto-rows: minmax(0, 1fr);
+}
+.telas-grade[data-n="2"], .telas-grade[data-n="3"], .telas-grade[data-n="4"] { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.telas-grade[data-n="3"] > :first-child { grid-row: span 2; }
+.telas-grade[data-n="5"], .telas-grade[data-n="6"] { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+.telas-grade[data-n="1"] { padding: 0; }
+.quadro-tela { min-width: 0; border-radius: 6px; overflow: hidden; }
+.telas-grade[data-n="1"] .quadro-tela { border-radius: 0; }
+.quadro-tela video { height: 100%; }
+.quadro-tela .barra { gap: 8px; padding: 8px 10px; opacity: 0; transition: opacity .15s; }
+.quadro-tela:hover .barra, .quadro-tela:focus-within .barra, .telas-grade[data-n="1"] .quadro-tela .barra { opacity: 1; }
+.quadro-tela .nome-tela { font-weight: 600; font-size: 14px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; }
+.quadro-tela .sobre { font-size: 15px; }
+.telas-rodape {
+  flex: none; display: flex; align-items: center; gap: 12px; flex-wrap: wrap; padding: 6px 12px; color: #fff;
+  background: #111214;
+}
+.telas-rodape .botao-icone { color: #fff; }
+.telas-rodape input[type="range"] { width: 110px; accent-color: #fff; }
+.telas-rodape .controles-som { display: flex; align-items: center; gap: 8px; }
+.sugestoes-tela { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; min-width: 0; }
+.sugestoes-tela .rotulo { font-size: 13px; color: rgba(255, 255, 255, .7); }
+@media (hover: none) { .quadro-tela .barra { opacity: 1; } }
+@media (max-width: 760px) {
+  .telas-grade[data-n] { grid-template-columns: minmax(0, 1fr); }
+  .telas-grade[data-n] > :first-child { grid-row: auto; }
+}
 
 /* Lives destacadas continuam tocando enquanto a pessoa usa o resto do grupo. */
 .janela-live {

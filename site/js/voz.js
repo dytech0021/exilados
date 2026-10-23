@@ -19,9 +19,9 @@ import { volumeNaFaixa } from './volume.js';
 import { faltaSomDaTela } from './som-tela.js';
 import { aviso, confirmar } from './ui.js';
 
-// tela: { qualidade, som } enquanto compartilha a própria tela; assistindo: de quem é a tela aberta (ou null).
+// tela: { qualidade, som } enquanto compartilha a própria tela (as telas abertas dos outros ficam em `assistidas`).
 export const voz = {
-  situacao: 'desligada', sala: null, mudo: false, surdo: false, semMicrofone: false, tela: null, assistindo: null,
+  situacao: 'desligada', sala: null, mudo: false, surdo: false, semMicrofone: false, tela: null,
 };
 
 /** Qualidades de compartilhamento de tela (o vídeo vai em H.264, que os computadores codificam no próprio chip). */
@@ -121,7 +121,7 @@ function aplicarVolume(id) {
   const participante = sala?.remoteParticipants.get(id);
   if (!participante) return;
   const daVoz = voz.surdo ? 0 : volumeEfetivo(id);
-  const daTela = voz.surdo ? 0 : volumeDaTelaEfetivo();
+  const daTela = voz.surdo || silenciadas.has(id) ? 0 : volumeDaTelaEfetivo();
   if (!PROGRAMA) {
     participante.setVolume(daVoz);
     participante.setVolume(daTela, LK.Track.Source.ScreenShareAudio);
@@ -355,8 +355,8 @@ const ehDaTela = (pub) => pub.source === LK.Track.Source.ScreenShare || pub.sour
 
 /** A voz de todos é recebida sempre; a tela (vídeo e som), só a de quem está sendo assistido; câmera, nunca. */
 function decidirRecebimento(pub, participante) {
-  const receber = ehDaTela(pub) ? voz.assistindo === participante.identity : pub.kind === 'audio';
-  if (receber && pub.source === LK.Track.Source.ScreenShare) pub.setVideoQuality(qualidadeRecebida(LK, CELULAR, pub.simulcasted));
+  const receber = ehDaTela(pub) ? assistidas.has(participante.identity) : pub.kind === 'audio';
+  if (receber && pub.source === LK.Track.Source.ScreenShare) pub.setVideoQuality(qualidadeDe(participante.identity, pub));
   if (receber) pub.setSubscribed(true);
 }
 
@@ -401,7 +401,9 @@ function limpar() {
   microfone = null;
   soltarTela();
   voz.tela = null;
-  voz.assistindo = null;
+  assistidas.clear();
+  silenciadas.clear();
+  destaque = null;
   sala = null;
   estado.falandoNaSala.clear();
   avisarQueFalo(false);
@@ -706,12 +708,34 @@ export async function pararTela({ trocando = false } = {}) {
   t.fluxo.getTracks().forEach((p) => p.stop());
 }
 
+// Telas dos outros abertas aqui (várias podem ficar lado a lado), a que está em tela cheia e as sem som aqui.
+const assistidas = new Set();
+const silenciadas = new Set();
+let destaque = null;
+
+const qualidadeDe = (id, pub) => qualidadeRecebida(LK, CELULAR, pub.simulcasted, { varias: assistidas.size > 1, destaque: destaque === id });
+
+/** Com mais ou menos telas abertas (ou outra em tela cheia), cada uma passa a vir na camada certa. */
+function ajustarQualidades() {
+  for (const id of assistidas) {
+    const pub = sala?.remoteParticipants.get(id)?.getTrackPublication(LK.Track.Source.ScreenShare);
+    if (pub?.isSubscribed) pub.setVideoQuality(qualidadeDe(id, pub));
+  }
+}
+
+function contarNaPresenca() {
+  if (!voz.sala) return;
+  const ids = [...assistidas];
+  // Uma só vai como texto, como antes (versões anteriores do site só contam assim).
+  atualizarPresenca({ assistindo: ids.length > 1 ? ids : ids[0] || null });
+}
+
 function receberTelaDe(id, sim) {
   const participante = sala?.remoteParticipants.get(id);
   if (!participante) return;
   for (const pub of participante.trackPublications.values()) {
     if (!ehDaTela(pub)) continue;
-    if (sim && pub.source === LK.Track.Source.ScreenShare) pub.setVideoQuality(qualidadeRecebida(LK, CELULAR, pub.simulcasted));
+    if (sim && pub.source === LK.Track.Source.ScreenShare) pub.setVideoQuality(qualidadeDe(id, pub));
     pub.setSubscribed(sim);
   }
 }
@@ -720,11 +744,11 @@ function receberTelaDe(id, sim) {
 export function reinscreverVideoDaTela(id) {
   const room = sala;
   const pub = room?.remoteParticipants.get(id)?.getTrackPublication(LK.Track.Source.ScreenShare);
-  if (!pub || voz.assistindo !== id) return;
+  if (!pub || !assistidas.has(id)) return;
   pub.setSubscribed(false);
   setTimeout(() => {
-    if (sala === room && voz.assistindo === id) {
-      pub.setVideoQuality(qualidadeRecebida(LK, CELULAR, pub.simulcasted));
+    if (sala === room && assistidas.has(id)) {
+      pub.setVideoQuality(qualidadeDe(id, pub));
       pub.setSubscribed(true);
     }
   }, 200);
@@ -734,25 +758,46 @@ export function iniciarVideo() {
   return sala?.startVideo();
 }
 
-/** Abre a tela de `id` (precisa estar na mesma sala de voz). Só uma por vez, como no Discord. */
+/** Abre a tela de `id` (precisa estar na mesma sala de voz). Várias podem ficar abertas ao mesmo tempo. */
 export function assistirTela(id) {
-  if (!sala || voz.assistindo === id) return;
-  const antes = voz.assistindo;
-  voz.assistindo = id;
-  if (antes) receberTelaDe(antes, false);
+  if (!sala || id === meuId() || assistidas.has(id)) return;
+  assistidas.add(id);
   receberTelaDe(id, true);
-  atualizarPresenca({ assistindo: id === meuId() ? null : id });
+  ajustarQualidades();
+  contarNaPresenca();
   avisar('telas');
 }
 
-export function pararDeAssistir() {
-  if (!voz.assistindo) return;
-  const antes = voz.assistindo;
-  voz.assistindo = null;
-  receberTelaDe(antes, false);
-  if (voz.sala) atualizarPresenca({ assistindo: null });
+/** Fecha a tela de `id`; sem `id`, todas. */
+export function pararDeAssistir(id) {
+  const ids = id === undefined ? [...assistidas] : [id].filter((x) => assistidas.has(x));
+  if (!ids.length) return;
+  for (const x of ids) {
+    assistidas.delete(x);
+    silenciadas.delete(x);
+    if (destaque === x) destaque = null;
+    receberTelaDe(x, false);
+  }
+  ajustarQualidades();
+  contarNaPresenca();
   avisar('telas');
 }
+
+/** A tela em tela cheia (ou null) vem na qualidade máxima; as outras, em 720p. */
+export function destacarTela(id) {
+  if (destaque === id) return;
+  destaque = id;
+  ajustarQualidades();
+}
+
+/** Silencia (ou devolve) o som da tela de `id` só aqui. */
+export function silenciarTela(id, sim) {
+  if (sim) silenciadas.add(id);
+  else silenciadas.delete(id);
+  aplicarVolume(id);
+}
+
+export const telaSilenciada = (id) => silenciadas.has(id);
 
 /**
  * O que se sabe da tela de `id` nesta sala: null se ela não está no ar aqui; senão { video, temSom, propria }, com
