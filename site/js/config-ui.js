@@ -119,7 +119,7 @@ async function paginaVoz(secao) {
     catch (falha) { somDoComputador.checked = !somDoComputador.checked; erro(falha); }
     finally { somDoComputador.disabled = false; }
   });
-  const anunciarEntradas = el('input', { type: 'checkbox', checked: p.anunciarEntradas, attrs: { 'aria-label': 'Ler em voz alta quem entra na sala' } });
+  const anunciarEntradas = el('input', { type: 'checkbox', checked: p.anunciarEntradas, attrs: { 'aria-label': 'Ler em voz alta quem entra e quem sai da sala' } });
   anunciarEntradas.addEventListener('change', () => voz.definirAnunciarEntradas(anunciarEntradas.checked));
   const volumeSaida = el('input', {
     type: 'range', class: 'faixa-config', min: 0, max: voz.VOLUME_MAXIMO, value: Math.min(p.volumeSaida, voz.VOLUME_MAXIMO),
@@ -209,7 +209,7 @@ async function paginaVoz(secao) {
     el('label', { class: 'campo' }, el('span', {}, 'Volume de entrada ', valorVolume), volume),
     el('label', { class: 'campo' }, el('span', {}, 'Volume de saída (todos da sala) ', valorSaida), volumeSaida),
     voz.ANDROID ? el('p', { class: 'ajuda', text: 'No celular, a voz usa o volume de chamada, que é separado do volume de música e vídeos: aumente pelos botões de volume do celular durante a conversa.' }) : null,
-    el('label', { class: 'opcao-voz' }, anunciarEntradas, el('span', { text: 'Ler em voz alta o nome de quem entra na sala' })),
+    el('label', { class: 'opcao-voz' }, anunciarEntradas, el('span', { text: 'Ler em voz alta quem entra e quem sai da sala' })),
     el('h3', { text: 'Teste do microfone' }),
     el('p', { class: 'ajuda', text: 'Fale algo: a barra mostra o que o microfone capta (com o volume de entrada acima).' }),
     botaoTeste, medidor,

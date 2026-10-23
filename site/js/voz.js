@@ -10,7 +10,7 @@
 import { LIVEKIT_SCRIPT } from './config.js';
 import { atualizarPresenca, avisarQueFalo } from './dados.js';
 import { avisar, estado, meuId, nomeDe } from './estado.js';
-import { anunciarEntrada } from './anuncio.js';
+import { anunciar } from './anuncio.js';
 import { api } from './supa.js';
 import { opcoesPublicacaoTela, qualidadeRecebida } from './qualidade-tela.js';
 import { conectarFiltroRuido } from './filtro-ruido.js';
@@ -411,6 +411,13 @@ function limpar() {
 // O que a presença diz quando sai da sala de voz.
 const FORA_DA_VOZ = { voz: null, tela: false, assistindo: null };
 
+/** Lê em voz alta quem entrou ou saiu da sala (se a opção estiver ligada e o som não estiver desligado). */
+function narrar(participante, evento) {
+  try {
+    anunciar(nomeDe(participante.identity), evento, { ligado: preferencias().anunciarEntradas, surdo: voz.surdo });
+  } catch { /* sem leitura em voz alta */ }
+}
+
 function montarEventos(LKC, room) {
   const E = LKC.RoomEvent;
   room
@@ -444,14 +451,16 @@ function montarEventos(LKC, room) {
       }
     })
     .on(E.MediaDevicesChanged, () => avisar('dispositivos'))
+    // O LiveKit só avisa quem entra depois que já estamos na sala (não quem já estava lá), e quem sai enquanto estamos.
     .on(E.ParticipantConnected, (participante) => {
-      // O LiveKit só avisa quem entra depois que já estamos na sala (não quem já estava lá).
       mudou();
-      try {
-        anunciarEntrada(nomeDe(participante.identity), { ligado: preferencias().anunciarEntradas, surdo: voz.surdo });
-      } catch { /* sem leitura em voz alta */ }
+      narrar(participante, 'entrou');
     })
-    .on(E.ParticipantDisconnected, () => { mudou(); avisar('telas'); })
+    .on(E.ParticipantDisconnected, (participante) => {
+      mudou();
+      avisar('telas');
+      narrar(participante, 'saiu');
+    })
     .on(E.Disconnected, (motivo) => {
       if (room !== sala) return;
       const removido = motivo === LKC.DisconnectReason?.PARTICIPANT_REMOVED;
@@ -500,7 +509,9 @@ export async function entrar(salaId) {
     microfone = mic || null;
     const room = new LK.Room({
       adaptiveStream: false,
-      dynacast: false,
+      // Quem compartilha a tela só codifica e envia as camadas que alguém está vendo (sem ninguém assistindo, nada):
+      // com várias telas saindo da mesma casa, as 3 camadas o tempo todo lotavam o upload.
+      dynacast: true,
       disconnectOnPageLeave: true,
       // A mixagem extra desvia a voz da saída normal do headset no EXE e do canal de chamada no Android.
       webAudioMix: !ANDROID && !PROGRAMA,
@@ -908,7 +919,7 @@ export async function definirPortaDeVoz(ligada) {
   }
 }
 
-/** Ler em voz alta o nome de quem entra na sala. */
+/** Ler em voz alta o nome de quem entra e de quem sai da sala. */
 export function definirAnunciarEntradas(ligado) {
   preferencias().anunciarEntradas = Boolean(ligado);
   guardar();
