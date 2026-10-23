@@ -6,7 +6,7 @@
 # Só montar o pacote, sem enviar (para conferir): .\servidor\publicar.ps1 -SoPacote
 # Forçar todos a atualizar: .\servidor\publicar.ps1 -Forcar — a versão mínima (site/versao.json) passa a ser esta:
 # quem está aberto numa versão mais velha recarrega sozinho em até 1 minuto, o servidor não deixa versão velha entrar
-# na voz, e todas as salas de voz são fechadas (todos caem e entram de novo já na versão nova).
+# na voz, e todos são tirados das salas de voz (entram de novo já na versão nova).
 param(
     [string]$Servidor = '177.153.35.193',
     [string]$Chave = (Join-Path $HOME '.ssh\filabox3d_deploy_ed25519'),
