@@ -4,11 +4,15 @@
 # Uso: .\servidor\publicar.ps1   (precisa da chave SSH do servidor em ~\.ssh, a mesma do Ponte)
 # Em outro PC, com outra chave: .\servidor\publicar.ps1 -Chave ~\.ssh\filabox_vps -Conhecidos ~\.ssh\known_hosts
 # Só montar o pacote, sem enviar (para conferir): .\servidor\publicar.ps1 -SoPacote
+# Forçar todos a atualizar: .\servidor\publicar.ps1 -Forcar — a versão mínima (site/versao.json) passa a ser esta:
+# quem está aberto numa versão mais velha recarrega sozinho em até 1 minuto, o servidor não deixa versão velha entrar
+# na voz, e todas as salas de voz são fechadas (todos caem e entram de novo já na versão nova).
 param(
     [string]$Servidor = '177.153.35.193',
     [string]$Chave = (Join-Path $HOME '.ssh\filabox3d_deploy_ed25519'),
     [string]$Conhecidos = (Join-Path $HOME '.ssh\filabox3d_known_hosts'),
-    [switch]$SoPacote
+    [switch]$SoPacote,
+    [switch]$Forcar
 )
 $ErrorActionPreference = 'Stop'
 # Programas externos (ssh, scp, node, tar) escrevem andamento no stderr: confere-se o código de saída de cada um.
@@ -41,7 +45,15 @@ try {
     [IO.File]::WriteAllText((Join-Path $montagem 'site\js\versao.js'),
         "// Gerado por servidor/publicar.ps1.`nexport const VERSAO_SITE = '$numero';`nexport const COMMIT_SITE = '$commit';`n",
         [Text.UTF8Encoding]::new($false))
-    Write-Host "Site versão $numero ($commit)"
+    # Sem -Forcar, a versão mínima continua a que está publicada.
+    $minima = 0
+    if ($Forcar) { $minima = [int]$numero }
+    else {
+        try { $minima = [int](Invoke-RestMethod 'https://filabox3d.com.br/exilados/versao.json' -TimeoutSec 10).minima } catch { }
+    }
+    [IO.File]::WriteAllText((Join-Path $montagem 'site\versao.json'), "{`"versao`":$numero,`"minima`":$minima}`n",
+        [Text.UTF8Encoding]::new($false))
+    Write-Host "Site versão $numero ($commit), mínima $minima$(if ($Forcar) { ' (forçada)' })"
 
     $pacote = Join-Path $env:TEMP 'exilados-publicar.tar.gz'
     if (Test-Path $pacote) { Remove-Item $pacote -Force }
@@ -59,6 +71,7 @@ try {
     $comando = 'set -e; rm -rf /tmp/exilados-publicar; mkdir /tmp/exilados-publicar; ' +
         'tar -xzf /tmp/exilados-publicar.tar.gz -C /tmp/exilados-publicar; ' +
         'bash /tmp/exilados-publicar/servidor/instalar.sh; ' +
+        $(if ($Forcar) { 'node /tmp/exilados-publicar/servidor/derrubar-voz.mjs; ' } else { '' }) +
         'rm -rf /tmp/exilados-publicar /tmp/exilados-publicar.tar.gz'
     & ssh @opcoes "root@$Servidor" $comando
     if ($LASTEXITCODE -ne 0) { throw 'A instalação no servidor falhou (veja acima).' }

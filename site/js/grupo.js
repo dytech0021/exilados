@@ -5,6 +5,7 @@ import {
 } from './estado.js';
 import { dataPorExtenso, formatarId, ordenarPorNome } from './formato.js';
 import { liveNoAr } from './presenca.js';
+import { VERSAO_A_VISTA as versaoAVista } from './atualizacao-site.js';
 import { abrirTransmitir, noPrograma } from './programa.js';
 import { api, sb } from './supa.js';
 import {
@@ -102,7 +103,7 @@ export function desenharTopoGrupo(topo) {
         souDono() ? { rotulo: 'Membros do grupo', icone: 'pessoas', fn: () => nav.abrirConfig('membros') } : null,
       ], r.left + 10, r.bottom + 6);
     },
-  }, el('span', { class: 'titulo', text: 'Exilados' }), icone('abaixo'));
+  }, el('span', { class: 'titulo', text: 'Exilados' }), el('span', { class: 'versao-topo', text: versaoAVista }), icone('abaixo'));
   limpar(topo, el('div', { class: 'lateral-topo' }, titulo,
     botaoIcone('addAmigo', 'Convidar pessoas (link ou ID)', () => nav.convidar(), 'convidar')));
 }

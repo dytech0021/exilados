@@ -638,6 +638,12 @@ a.botao, a.botao:hover { color: #fff; text-decoration: none; }
   font-weight: 600; text-align: left;
 }
 .lateral-topo-titulo:hover { color: #fff; }
+/* Versão logo depois do nome (o nome não estica mais; a versão ocupa o resto e corta se faltar espaço). */
+.lateral-topo-titulo .titulo { flex: 0 1 auto; }
+.versao-topo {
+  flex: 1; min-width: 0; margin-left: 4px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  color: var(--texto-fraco); font-size: 11px; font-weight: 500;
+}
 
 /* ---------- conversa como no Discord: responder, reações, menções, prévias, GIFs, arquivos e chamadas ---------- */
 

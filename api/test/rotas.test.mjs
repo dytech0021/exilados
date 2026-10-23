@@ -130,7 +130,7 @@ function livekitFalso() {
   return { estado, tratar };
 }
 
-async function montar({ agora, gifs = null, buscarWeb } = {}) {
+async function montar({ agora, gifs = null, buscarWeb, versaoMinima } = {}) {
   const sb = supabaseFalso();
   const lk = livekitFalso();
   const mm = { leitores: [], expulsos: [] };
@@ -156,15 +156,20 @@ async function montar({ agora, gifs = null, buscarWeb } = {}) {
     config,
     gifs,
     ...(buscarWeb ? { buscarWeb } : {}),
+    ...(versaoMinima ? { versaoMinima } : {}),
     segredoMidia: 'segredo-das-imagens',
     agora: () => relogio.t,
     registrar: (m) => erros.push(m),
   });
   const api = await ouvir(rotas);
-  const chamar = async (metodo, caminho, { quem, corpo } = {}) => {
+  const chamar = async (metodo, caminho, { quem, corpo, site } = {}) => {
     const resposta = await fetch(`${api.url}${caminho}`, {
       method: metodo,
-      headers: { ...(quem ? { authorization: `Bearer t-${quem}` } : {}), 'content-type': 'application/json' },
+      headers: {
+        ...(quem ? { authorization: `Bearer t-${quem}` } : {}),
+        ...(site ? { 'x-exilados-site': site } : {}),
+        'content-type': 'application/json',
+      },
       body: corpo === undefined ? undefined : JSON.stringify(corpo),
     });
     const tipo = resposta.headers.get('content-type') || '';
@@ -193,6 +198,18 @@ test('sem login, login inválido ou fora do grupo: recusado', async () => {
     assert.equal(fora.status, 403);
     assert.equal(fora.dados.erro, 'Você não faz mais parte do grupo.');
     assert.equal((await t.chamar('POST', '/nada', { quem: ANA })).status, 404);
+  } finally { t.fechar(); }
+});
+
+test('voz: com versão mínima publicada, site mais velho (ou sem versão) é mandado recarregar', async () => {
+  const t = await montar({ versaoMinima: () => 43 });
+  try {
+    const velho = await t.chamar('POST', '/voz/entrar', { quem: ANA, corpo: { sala: VOZ } });
+    assert.equal(velho.status, 426);
+    assert.match(velho.dados.erro, /versão nova do Exilados/);
+    assert.equal((await t.chamar('POST', '/voz/entrar', { quem: ANA, corpo: { sala: VOZ }, site: '42' })).status, 426);
+    assert.equal((await t.chamar('POST', '/voz/entrar', { quem: ANA, corpo: { sala: VOZ }, site: '43' })).status, 200);
+    assert.equal((await t.chamar('POST', '/voz/entrar', { quem: ANA, corpo: { sala: VOZ }, site: 'dev' })).status, 200);
   } finally { t.fechar(); }
 });
 

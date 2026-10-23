@@ -40,6 +40,25 @@ test('sem login, ou sem conseguir renovar: pede para entrar de novo', async () =
   await assert.rejects(falso({ expiraEm: 1, renovada: null }).api.chamar('/x'), /Entre na sua conta de novo/);
 });
 
+test('cada chamada leva a versão do site; versão velha (426) avisa para recarregar', async () => {
+  const cabecalhos = [];
+  let velha = 0;
+  const api = criarApi({
+    base: '',
+    versao: '43',
+    aoVersaoVelha: () => { velha += 1; },
+    obterSessao: async () => ({ access_token: 't', expires_at: Date.now() / 1000 + 3600 }),
+    renovarSessao: async () => null,
+    fetch: async (url, opcoes) => {
+      cabecalhos.push(opcoes.headers['x-exilados-site']);
+      return { ok: false, status: 426, json: async () => ({ erro: 'Há uma versão nova do Exilados.' }) };
+    },
+  });
+  await assert.rejects(api.chamar('/voz/entrar'), (e) => e.status === 426);
+  assert.deepEqual(cabecalhos, ['43']);
+  assert.equal(velha, 1);
+});
+
 test('erro do servidor chega com a mensagem dele', async () => {
   const api = criarApi({
     base: '',

@@ -54,6 +54,11 @@ export class LiveKit {
     }
   }
 
+  /** Fecha `sala`: todos caem dela (usado ao publicar com -Forcar). */
+  async fecharSala(sala) {
+    await this.#chamar('DeleteRoom', { room: sala }, sala);
+  }
+
   /** Tira `identidade` de todas as salas de voz; devolve quantas. */
   async tirarDeTodas(identidade) {
     let removido = 0;

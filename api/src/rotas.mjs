@@ -2,6 +2,7 @@
 //
 // Todo pedido, menos /saude, /midia e /gif (imagens que o site mostra), traz o login do Supabase (Authorization:
 // Bearer) de um membro ativo do grupo.
+import { readFileSync } from 'node:fs';
 import { gifAceito } from './gifs.mjs';
 import { tokenDoLiveKit } from './jwt.mjs';
 import { SEM_SINAL_MS } from './lives.mjs';
@@ -77,6 +78,14 @@ function criarLimite(quantos, janela, agora) {
   };
 }
 
+/**
+ * Versão mínima do site (versao.json, gravado por servidor/publicar.ps1 ao lado do site). Publicado com -Forcar, quem
+ * está numa versão mais velha não entra na voz até recarregar; sem o arquivo, não há mínima.
+ */
+function lerVersaoMinima(arquivo) {
+  try { return Number(JSON.parse(readFileSync(arquivo, 'utf8')).minima) || 0; } catch { return 0; }
+}
+
 function guardarCom(mapa, chave, valor, limite = 500) {
   if (mapa.size >= limite) mapa.delete(mapa.keys().next().value);
   mapa.set(chave, valor);
@@ -84,7 +93,7 @@ function guardarCom(mapa, chave, valor, limite = 500) {
 
 export function criarRotas({
   supabase, livekit, lives, mediamtx, config, gifs = null, buscarWeb = buscar, segredoMidia = config.livesSegredo,
-  agora = () => Date.now(), registrar = console.error,
+  agora = () => Date.now(), registrar = console.error, versaoMinima = () => lerVersaoMinima(config.versaoSite),
 }) {
   const previas = new Map();
   const limitePrevia = criarLimite(60, 60000, agora);
@@ -99,12 +108,17 @@ export function criarRotas({
     if (!id) throw new Recusa(401, 'Entre na sua conta de novo.');
     const membro = await supabase.membro(token, id);
     if (!membro || !membro.ativo) throw new Recusa(403, 'Você não faz mais parte do grupo.');
-    return { token, id, membro };
+    return { token, id, membro, site: String(pedido.headers['x-exilados-site'] || '') };
   }
 
   const rotas = {
     // Sala de voz do grupo ({ sala }) ou chamada numa conversa direta ({ conversa }, só os dois amigos).
-    async 'POST /voz/entrar'({ token, id, membro }, corpo) {
+    async 'POST /voz/entrar'({ token, id, membro, site }, corpo) {
+      // O site de desenvolvimento ("dev") passa; os publicados mandam o número da versão (os antigos, nada).
+      const minima = site === 'dev' ? 0 : versaoMinima();
+      if (minima && !(Number(site) >= minima)) {
+        throw new Recusa(426, 'Há uma versão nova do Exilados. Recarregue a página (F5) ou feche e abra o programa/app para entrar na voz.');
+      }
       let nomeSala;
       if (corpo.conversa !== undefined) {
         const conversaId = String(corpo.conversa || '');

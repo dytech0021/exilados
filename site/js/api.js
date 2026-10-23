@@ -1,5 +1,5 @@
 // Chamadas ao exilados-api (/exilados/api/), sempre com um login do Supabase válido: se ele vence em menos de
-// 1 minuto, renova antes de chamar.
+// 1 minuto, renova antes de chamar. Leva a versão do site: o servidor recusa (426) versão mais velha que a mínima.
 
 export class ErroApi extends Error {
   constructor(mensagem, status) {
@@ -8,7 +8,10 @@ export class ErroApi extends Error {
   }
 }
 
-export function criarApi({ base, obterSessao, renovarSessao, fetch = globalThis.fetch.bind(globalThis), agora = () => Date.now() }) {
+export function criarApi({
+  base, obterSessao, renovarSessao, versao = '', aoVersaoVelha = () => {}, fetch = globalThis.fetch.bind(globalThis),
+  agora = () => Date.now(),
+}) {
   async function token() {
     let sessao = await obterSessao();
     if (!sessao) throw new ErroApi('Entre na sua conta de novo.', 401);
@@ -25,13 +28,14 @@ export function criarApi({ base, obterSessao, renovarSessao, fetch = globalThis.
     try {
       resposta = await fetch(`${base}${caminho}`, {
         method: 'POST',
-        headers: { authorization: autorizacao, 'content-type': 'application/json' },
+        headers: { authorization: autorizacao, 'content-type': 'application/json', 'x-exilados-site': versao },
         body: JSON.stringify(corpo),
       });
     } catch {
       throw new ErroApi('Sem conexão com o servidor. Tente de novo.', 0);
     }
     const dados = await resposta.json().catch(() => ({}));
+    if (resposta.status === 426) aoVersaoVelha();
     if (!resposta.ok) throw new ErroApi(dados.erro || 'O servidor não respondeu. Tente de novo.', resposta.status);
     return dados;
   }

@@ -2,6 +2,8 @@
 // aqui só sai deste navegador (não desconecta o FilaBox nem outros aparelhos).
 import { API, SUPABASE_CHAVE, SUPABASE_URL } from './config.js';
 import { criarApi } from './api.js';
+import { recarregar } from './atualizacao-site.js';
+import { VERSAO_SITE } from './versao.js';
 
 export const sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_CHAVE, {
   auth: {
@@ -18,6 +20,8 @@ export const api = criarApi({
   base: API,
   obterSessao: async () => (await sb.auth.getSession()).data.session,
   renovarSessao: async () => (await sb.auth.refreshSession()).data.session,
+  versao: VERSAO_SITE,
+  aoVersaoVelha: () => recarregar('servidor'),
 });
 
 /** Lança o erro do Supabase com uma mensagem em português quando der. */

@@ -22,5 +22,7 @@ export function lerConfig(env = process.env) {
     livesSegredo: exigir('LIVES_SEGREDO', 32),
     // Chave do Giphy para a busca de GIFs; vazia, o botão de GIF não aparece no site.
     giphyChave: String(env.GIPHY_CHAVE || '').trim(),
+    // versao.json do site publicado (versão e versão mínima para entrar na voz).
+    versaoSite: env.EXILADOS_VERSAO_SITE || '/var/www/exilados/www/exilados/versao.json',
   };
 }

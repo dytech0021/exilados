@@ -25,6 +25,7 @@ import { liveNoAr } from './presenca.js';
 import {
   atualizarPrograma, iniciarPrograma, noPrograma, quandoAtualizacao,
 } from './programa.js';
+import { NOME_COM_VERSAO, vigiarVersao } from './atualizacao-site.js';
 import { conferir, sb } from './supa.js';
 import { fecharTela, montarTela } from './tela.js';
 import {
@@ -48,6 +49,7 @@ const partes = {
 };
 const celular = () => window.matchMedia('(max-width: 760px)').matches;
 const CHAVE_SALA = 'exilados-ultima-sala';
+const NOME = NOME_COM_VERSAO;
 // Vistas de assistir (live do programa do Windows ou tela compartilhada na voz): "Voltar" leva para antes delas.
 const assistindo = (tipo) => tipo === 'live' || tipo === 'tela';
 let vistaAnterior = null;
@@ -112,7 +114,7 @@ function atualizarTrilho() {
   grupo.querySelector('.selo')?.remove();
   if (grupoMencoes) grupo.append(el('span', { class: 'selo', text: String(grupoMencoes) }));
   const total = dmNaoLidas + grupoMencoes + (grupoNaoLido && !grupoMencoes ? 1 : 0);
-  document.title = total ? `(${total}) Exilados` : 'Exilados';
+  document.title = total ? `(${total}) ${NOME}` : NOME;
 }
 
 function desenharLateral() {
@@ -445,6 +447,8 @@ function decidir(usuario) {
 
 async function iniciar() {
   if ('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js', { scope: BASE }).catch(() => {});
+  document.title = NOME;
+  vigiarVersao({ aviso: (texto) => aviso(texto, { duracao: 0 }) });
   // Um link de convite aberto com o site já aberto nesta aba só troca o "#": recomeça para ler o convite.
   window.addEventListener('hashchange', () => { if (/convite=/.test(location.hash)) location.reload(); });
   const codigo = lerConviteDaUrl();

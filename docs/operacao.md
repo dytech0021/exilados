@@ -32,6 +32,13 @@ Roda os testes do exilados-api, empacota `api/`, `servidor/` e `site/`, envia e 
 root. Cada passo confere o que já existe e pode rodar de novo. nginx e MediaMTX voltam ao arquivo anterior se a
 mudança não passar na conferência. O MediaMTX só é mexido sem live no ar (ou com `FORCAR_MEDIAMTX=1`).
 
+Para obrigar todo mundo a ficar na versão nova: `.\servidor\publicar.ps1 -Forcar`. A versão mínima em
+`site/versao.json` passa a ser a publicada. Quem está com o site, o programa ou o app aberto numa versão mais velha
+recarrega sozinho em até 1 minuto. A API recusa a entrada na voz de versão velha (426, "recarregue"). E todas as salas
+de voz são fechadas (`servidor/derrubar-voz.mjs`), então todos caem. Sem `-Forcar`, a mínima continua a que estava.
+Versões do site anteriores à 43 não conferem a mínima: elas só descobrem ao tentar entrar na voz.
+A versão aparece no título da janela e ao lado do nome no topo da lateral ("Exilados 1.0.8 · site 43").
+
 ### 2.2 Programa do Windows
 
 1. Suba `<Version>` em `windows/Exilados.csproj`.
