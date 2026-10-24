@@ -150,9 +150,10 @@ internal sealed class JanelaPrincipal : Form
 
     private async Task IniciarAsync()
     {
+        CoreWebView2Environment ambiente;
         try
         {
-            var ambiente = await CoreWebView2Environment.CreateAsync(null, PastaDados);
+            ambiente = await CoreWebView2Environment.CreateAsync(null, PastaDados);
             await _web.EnsureCoreWebView2Async(ambiente);
         }
         catch (Exception ex) when (ex is WebView2RuntimeNotFoundException or COMException or InvalidOperationException or ArgumentException or UnauthorizedAccessException)
@@ -169,8 +170,27 @@ internal sealed class JanelaPrincipal : Form
         web.Settings.UserAgent += $" ExiladosPrograma/{Atualizacao.Atual}";
         await web.AddScriptToExecuteOnDocumentCreatedAsync($"window.exiladosPrograma = Object.freeze({{ versao: '{Atualizacao.Atual}' }});");
         web.NavigationStarting += AoNavegar;
-        web.NewWindowRequested += (_, e) =>
+        web.NewWindowRequested += async (_, e) =>
         {
+            // Live ou tela destacada pelo site: vira uma janela do Windows (outro monitor, tamanho livre).
+            if (e.Uri == "about:blank" && e.Name.StartsWith(JanelaVideo.Prefixo, StringComparison.Ordinal))
+            {
+                using var adiar = e.GetDeferral();
+                try
+                {
+                    var recursos = e.WindowFeatures;
+                    var janela = new JanelaVideo(this, recursos.HasSize ? (int)recursos.Width : 0, recursos.HasSize ? (int)recursos.Height : 0);
+                    janela.Show();
+                    e.NewWindow = await janela.PrepararAsync(ambiente);
+                    e.Handled = true;
+                }
+                catch (Exception ex) when (ex is COMException or InvalidOperationException or ArgumentException)
+                {
+                    Registro.Erro(ex);
+                    e.Handled = true;
+                }
+                return;
+            }
             e.Handled = true;
             Abrir(e.Uri);
         };

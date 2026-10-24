@@ -9,7 +9,7 @@
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
     <AssemblyName>Exilados</AssemblyName>
     <RootNamespace>Exilados</RootNamespace>
-    <Version>1.0.8</Version>
+    <Version>1.0.9</Version>
     <Product>Exilados</Product>
     <Description>Grupo Exilados: texto, voz e lives</Description>
     <ApplicationIcon>exilados.ico</ApplicationIcon>

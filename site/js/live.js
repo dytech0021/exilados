@@ -182,7 +182,8 @@ function atualizarSom(a) {
 }
 
 function telaCheia(a) {
-  if (document.fullscreenElement) document.exitFullscreen().catch(() => {});
+  const doc = a.palco.ownerDocument; // a janela separada é outro documento
+  if (doc.fullscreenElement) doc.exitFullscreen().catch(() => {});
   else if (a.palco.requestFullscreen) a.palco.requestFullscreen().catch(() => a.video.webkitEnterFullscreen?.());
   else a.video.webkitEnterFullscreen?.();
 }

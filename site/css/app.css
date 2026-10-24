@@ -452,6 +452,10 @@ button.ao-vivo:hover { background: var(--vermelho-escuro); }
 .janela-live-nome { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 13px; font-weight: 600; }
 .janela-live-titulo .botao-icone { width: 26px; height: 26px; }
 .janela-live-fechar { font-size: 24px; line-height: 1; }
+.janela-live-destacar { font-size: 16px; line-height: 1; }
+/* Live ou tela levada para uma janela separada do sistema: o vídeo ocupa a janela toda. */
+body.janela-destacada { margin: 0; height: 100vh; display: flex; flex-direction: column; overflow: hidden; background: #000; }
+body.janela-destacada > * { flex: 1; min-height: 0; }
 .janela-live .live { flex: 1; min-height: 0; }
 .janela-live .live video { height: 100%; }
 .janela-live .live .barra { gap: 5px; padding: 5px 20px; }

@@ -2,6 +2,32 @@
 import { ALTURA_TITULO, MARGEM, mover, redimensionar } from './flutuante.js';
 
 const abertas = new Set();
+let numeroSeparada = 0;
+
+/**
+ * Janela separada só no computador (no celular e no app Android não há outra janela para abrir). No programa do
+ * Windows, só a partir da 1.0.9: antes dela o programa descartava a janela nova.
+ */
+const podeDestacar = () => typeof window.open === 'function' && !/Android|iPhone|iPad|iPod/i.test(navigator.userAgent)
+  && !window.ExiladosAndroid && window.matchMedia?.('(pointer: fine)').matches !== false
+  && (!window.exiladosPrograma || versaoAoMenos(window.exiladosPrograma.versao, [1, 0, 9]));
+
+function versaoAoMenos(versao, minima) {
+  const partes = String(versao || '').split('.').map(Number);
+  for (let i = 0; i < minima.length; i++) {
+    if ((partes[i] || 0) !== minima[i]) return (partes[i] || 0) > minima[i];
+  }
+  return true;
+}
+
+/** Um vídeo que muda de página precisa voltar a tocar (o fluxo continua o mesmo). */
+function retomarVideos(raiz) {
+  for (const video of raiz.querySelectorAll('video')) {
+    const fluxo = video.srcObject;
+    if (fluxo) { video.srcObject = null; video.srcObject = fluxo; }
+    video.play().catch(() => {});
+  }
+}
 const viewport = () => ({ largura: window.innerWidth, altura: window.innerHeight });
 const avisar = () => window.dispatchEvent(new Event('janelas-video'));
 
@@ -18,8 +44,13 @@ export function criarJanelaLive({ titulo, conteudo, aoFechar }) {
   fechar.title = 'Fechar esta transmissão';
   fechar.setAttribute('aria-label', fechar.title);
   fechar.addEventListener('click', aoFechar);
+  const destacarBotao = criar('button', 'botao-icone janela-live-destacar', '⧉');
+  destacarBotao.type = 'button';
+  destacarBotao.title = 'Abrir numa janela separada (leve para qualquer lugar ou outro monitor)';
+  destacarBotao.setAttribute('aria-label', destacarBotao.title);
+  destacarBotao.addEventListener('click', () => destacar());
   const barra = criar('div', 'janela-live-titulo');
-  barra.append(nome, fechar);
+  barra.append(nome, ...(podeDestacar() ? [destacarBotao] : []), fechar);
   const elemento = criar('section', 'janela-live');
   elemento.setAttribute('aria-label', titulo);
   elemento.append(barra, conteudo);
@@ -86,12 +117,41 @@ export function criarJanelaLive({ titulo, conteudo, aoFechar }) {
     }, 0, 0, tela));
   };
   let destruida = false;
+  // Janela separada (de verdade, do sistema): o vídeo que já toca muda de página, sem reconectar.
+  let separada = null;
+  const fecharSeparada = () => { if (separada && !separada.closed) separada.close(); };
+  function destacar() {
+    if (separada && !separada.closed) return separada.focus();
+    separada = window.open('', `exilados-video-${++numeroSeparada}`,
+      `popup,width=${Math.round(geometria.largura)},height=${Math.round(geometria.alturaVideo)}`);
+    if (!separada) return;
+    const doc = separada.document;
+    doc.title = nome.textContent;
+    const estilo = doc.createElement('link');
+    estilo.rel = 'stylesheet';
+    estilo.href = new URL('css/app.css', document.baseURI).href;
+    doc.head.append(estilo);
+    doc.body.className = 'janela-destacada';
+    doc.body.append(doc.adoptNode(conteudo));
+    retomarVideos(conteudo);
+    elemento.hidden = true;
+    // Fechar a janela separada fecha a transmissão (como fechar a janela dentro do site).
+    separada.addEventListener('pagehide', () => { if (!destruida) aoFechar(); });
+    avisar();
+  }
+  window.addEventListener('pagehide', fecharSeparada);
   const janela = {
     elemento, focar,
-    definirTitulo(texto) { nome.textContent = texto; elemento.setAttribute('aria-label', texto); },
+    definirTitulo(texto) {
+      nome.textContent = texto;
+      elemento.setAttribute('aria-label', texto);
+      if (separada && !separada.closed) separada.document.title = texto;
+    },
     destruir() {
       if (destruida) return;
       destruida = true;
+      window.removeEventListener('pagehide', fecharSeparada);
+      fecharSeparada();
       pararArraste?.();
       window.removeEventListener('resize', ajustar);
       abertas.delete(janela);

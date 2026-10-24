@@ -71,7 +71,8 @@ function fecharQuadro(id) {
 }
 
 function telaCheia(q) {
-  if (document.fullscreenElement) document.exitFullscreen().catch(() => {});
+  const doc = q.elemento.ownerDocument; // a janela separada é outro documento
+  if (doc.fullscreenElement) doc.exitFullscreen().catch(() => {});
   else if (q.elemento.requestFullscreen) q.elemento.requestFullscreen().catch(() => q.video.webkitEnterFullscreen?.());
   else q.video.webkitEnterFullscreen?.();
 }
