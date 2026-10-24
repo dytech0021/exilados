@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 
 import { Elemento, instalarDom } from '../test-support/dom-video.mjs';
-import { criarJanelaLive } from '../js/janela-live.js';
+import { criarJanelaLive, modoDaJanela } from '../js/janela-live.js';
 
 function ponteiro(alvo, tipo, x, y) {
   const evento = new Event(tipo, { cancelable: true });
@@ -48,4 +48,21 @@ test('reduzir a viewport mantém as janelas acessíveis sem forçar proporção'
   assert.equal(a.elemento.style.left, '8px');
   assert.equal(a.elemento.style.top, '8px');
   a.destruir();
+});
+
+test('no programa do Windows (1.0.9+) a transmissão já abre numa janela do sistema; antes dela, não', () => {
+  assert.equal(modoDaJanela({ programa: { versao: '1.0.9' }, agente: 'Windows', ponteiroFino: true }), 'sistema');
+  assert.equal(modoDaJanela({ programa: { versao: '1.1.0' }, agente: 'Windows', ponteiroFino: true }), 'sistema');
+  assert.equal(modoDaJanela({ programa: { versao: '1.0.8' }, agente: 'Windows', ponteiroFino: true }), 'site');
+});
+
+test('no navegador do computador a janela fica no site, com o botão de destacar', () => {
+  assert.equal(modoDaJanela({ programa: null, agente: 'Windows', ponteiroFino: true }), 'com-botao');
+  assert.equal(modoDaJanela({ programa: null, agente: 'Macintosh', ponteiroFino: true }), 'com-botao');
+});
+
+test('no celular e no app Android não há janela separada', () => {
+  assert.equal(modoDaJanela({ programa: null, agente: 'Android', ponteiroFino: false }), 'site');
+  assert.equal(modoDaJanela({ programa: null, agente: 'iPhone', ponteiroFino: false }), 'site');
+  assert.equal(modoDaJanela({ programa: null, agente: 'Windows', app: true, ponteiroFino: true }), 'site');
 });

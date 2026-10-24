@@ -5,12 +5,25 @@ const abertas = new Set();
 let numeroSeparada = 0;
 
 /**
- * Janela separada só no computador (no celular e no app Android não há outra janela para abrir). No programa do
- * Windows, só a partir da 1.0.9: antes dela o programa descartava a janela nova.
+ * Onde a transmissão aparece:
+ * - 'sistema': no programa do Windows (1.0.9+), já abre numa janela do Windows, que vai para qualquer lugar ou outro
+ *   monitor. A janela desenhada no site nunca sai do programa, por isso lá ela não serve.
+ * - 'com-botao': no navegador do computador, a janela fica no site com o botão de destacar (o navegador pode barrar
+ *   janelas novas, e muita gente prefere tudo numa aba só).
+ * - 'site': no celular, no app Android e no programa antigo, só a janela do site.
  */
-const podeDestacar = () => typeof window.open === 'function' && !/Android|iPhone|iPad|iPod/i.test(navigator.userAgent)
-  && !window.ExiladosAndroid && window.matchMedia?.('(pointer: fine)').matches !== false
-  && (!window.exiladosPrograma || versaoAoMenos(window.exiladosPrograma.versao, [1, 0, 9]));
+export function modoDaJanela({ programa, agente, app = false, ponteiroFino = true } = {}) {
+  if (/Android|iPhone|iPad|iPod/i.test(agente || '') || app || !ponteiroFino) return 'site';
+  if (programa) return versaoAoMenos(programa.versao, [1, 0, 9]) ? 'sistema' : 'site';
+  return 'com-botao';
+}
+
+const modoDaqui = () => (typeof window.open !== 'function' ? 'site' : modoDaJanela({
+  programa: window.exiladosPrograma,
+  agente: navigator.userAgent,
+  app: Boolean(window.ExiladosAndroid),
+  ponteiroFino: window.matchMedia?.('(pointer: fine)').matches !== false,
+}));
 
 function versaoAoMenos(versao, minima) {
   const partes = String(versao || '').split('.').map(Number);
@@ -18,6 +31,24 @@ function versaoAoMenos(versao, minima) {
     if ((partes[i] || 0) !== minima[i]) return (partes[i] || 0) > minima[i];
   }
   return true;
+}
+
+/** Desenho do botão de destacar (uma janelinha com uma seta saindo). */
+function desenhoDeJanela() {
+  const NS = 'http://www.w3.org/2000/svg';
+  const svg = document.createElementNS(NS, 'svg');
+  svg.setAttribute('class', 'icone');
+  svg.setAttribute('viewBox', '0 0 24 24');
+  svg.setAttribute('fill', 'none');
+  svg.setAttribute('stroke', 'currentColor');
+  svg.setAttribute('stroke-width', '2');
+  svg.setAttribute('stroke-linecap', 'round');
+  svg.setAttribute('stroke-linejoin', 'round');
+  svg.setAttribute('aria-hidden', 'true');
+  const caminho = document.createElementNS(NS, 'path');
+  caminho.setAttribute('d', 'M13 5H5v14h14v-8M14 10l6-6M15 4h5v5');
+  svg.append(caminho);
+  return svg;
 }
 
 /** Um vídeo que muda de página precisa voltar a tocar (o fluxo continua o mesmo). */
@@ -44,13 +75,15 @@ export function criarJanelaLive({ titulo, conteudo, aoFechar }) {
   fechar.title = 'Fechar esta transmissão';
   fechar.setAttribute('aria-label', fechar.title);
   fechar.addEventListener('click', aoFechar);
-  const destacarBotao = criar('button', 'botao-icone janela-live-destacar', '⧉');
+  const modo = modoDaqui();
+  const destacarBotao = criar('button', 'botao-icone janela-live-destacar');
   destacarBotao.type = 'button';
   destacarBotao.title = 'Abrir numa janela separada (leve para qualquer lugar ou outro monitor)';
   destacarBotao.setAttribute('aria-label', destacarBotao.title);
+  destacarBotao.append(desenhoDeJanela()); // desenho, e não um caractere que pode faltar na fonte
   destacarBotao.addEventListener('click', () => destacar());
   const barra = criar('div', 'janela-live-titulo');
-  barra.append(nome, ...(podeDestacar() ? [destacarBotao] : []), fechar);
+  barra.append(nome, ...(modo === 'com-botao' ? [destacarBotao] : []), fechar);
   const elemento = criar('section', 'janela-live');
   elemento.setAttribute('aria-label', titulo);
   elemento.append(barra, conteudo);
@@ -122,8 +155,13 @@ export function criarJanelaLive({ titulo, conteudo, aoFechar }) {
   const fecharSeparada = () => { if (separada && !separada.closed) separada.close(); };
   function destacar() {
     if (separada && !separada.closed) return separada.focus();
-    separada = window.open('', `exilados-video-${++numeroSeparada}`,
-      `popup,width=${Math.round(geometria.largura)},height=${Math.round(geometria.alturaVideo)}`);
+    try {
+      separada = window.open('', `exilados-video-${++numeroSeparada}`,
+        `popup,width=${Math.round(geometria.largura)},height=${Math.round(geometria.alturaVideo)}`);
+    } catch {
+      separada = null;
+    }
+    // Janela barrada (navegador) ou indisponível: fica a janela desenhada no site.
     if (!separada) return;
     const doc = separada.document;
     doc.title = nome.textContent;
@@ -164,6 +202,8 @@ export function criarJanelaLive({ titulo, conteudo, aoFechar }) {
   document.getElementById('app').append(elemento);
   window.addEventListener('resize', ajustar);
   focar();
+  // No programa do Windows, a janela desenhada no site não sai dele: a transmissão já abre numa janela do Windows.
+  if (modo === 'sistema') destacar();
   avisar();
   return janela;
 }
