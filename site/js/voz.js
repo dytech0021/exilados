@@ -413,6 +413,7 @@ function limpar() {
   voz.tela = null;
   assistidas.clear();
   silenciadas.clear();
+  tamanhos.clear();
   destaque = null;
   sala = null;
   estado.vozLocal = null;
@@ -780,7 +781,15 @@ const assistidas = new Set();
 const silenciadas = new Set();
 let destaque = null;
 
-const qualidadeDe = (id, pub) => qualidadeRecebida(LK, CELULAR, pub.simulcasted, { varias: assistidas.size > 1, destaque: destaque === id });
+// Tamanho de verdade da janela em que cada tela aparece: { largura, densidade }.
+const tamanhos = new Map();
+
+const qualidadeDe = (id, pub) => qualidadeRecebida(LK, CELULAR, pub.simulcasted, {
+  varias: assistidas.size > 1,
+  destaque: destaque === id,
+  larguraVista: tamanhos.get(id)?.largura || 0,
+  densidade: tamanhos.get(id)?.densidade || 1,
+});
 
 /** Com mais ou menos telas abertas (ou outra em tela cheia), cada uma passa a vir na camada certa. */
 function ajustarQualidades() {
@@ -788,6 +797,18 @@ function ajustarQualidades() {
     const pub = sala?.remoteParticipants.get(id)?.getTrackPublication(LK.Track.Source.ScreenShare);
     if (pub?.isSubscribed) pub.setVideoQuality(qualidadeDe(id, pub));
   }
+}
+
+/**
+ * tela.js avisa o tamanho da janela de cada transmissão: a imagem passa a vir no tamanho que cabe nela, em vez de
+ * sempre em 1080p. Decodificar menos pixels sobra mais placa de vídeo para o jogo.
+ */
+export function tamanhoDaTela(id, largura, densidade = 1) {
+  const antes = tamanhos.get(id);
+  const nova = { largura: Math.round(largura), densidade };
+  if (antes && Math.abs(antes.largura - nova.largura) < 40 && antes.densidade === densidade) return;
+  tamanhos.set(id, nova);
+  if (assistidas.has(id)) ajustarQualidades();
 }
 
 function contarNaPresenca() {
@@ -842,6 +863,7 @@ export function pararDeAssistir(id) {
   for (const x of ids) {
     assistidas.delete(x);
     silenciadas.delete(x);
+    tamanhos.delete(x);
     if (destaque === x) destaque = null;
     receberTelaDe(x, false);
   }

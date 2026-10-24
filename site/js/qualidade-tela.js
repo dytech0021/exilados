@@ -14,12 +14,21 @@ export function opcoesPublicacaoTela(LK, q) {
 }
 
 /**
- * Camada pedida ao servidor. Com várias telas abertas lado a lado, cada uma vem em 720p (a de tela cheia, `destaque`,
- * na máxima): com o dynacast, quem transmite nem envia o 1080p que ninguém está vendo grande.
+ * Camada pedida ao servidor para a tela de alguém. Segue o tamanho de verdade da janela em que ela aparece
+ * (`larguraVista`, em pixels do site; `densidade` é o devicePixelRatio): uma janelinha de canto não precisa de 1080p,
+ * e decodificar menos pixels pesa menos no computador de quem está jogando. É a ideia do adaptiveStream do LiveKit,
+ * feita à mão porque as janelas separadas são outra página e o automático não as enxerga.
+ * Sem medida ainda, vale a regra antiga: com várias telas abertas, 720p em cada uma.
  */
-export function qualidadeRecebida(LK, celular, temCamadas, { varias = false, destaque = false } = {}) {
+export function qualidadeRecebida(LK, celular, temCamadas, { varias = false, destaque = false, larguraVista = 0, densidade = 1 } = {}) {
   // Quem ainda transmite com uma única camada precisa continuar recebível até reiniciar a live.
   if (!temCamadas) return LK.VideoQuality.HIGH;
   if (celular) return LK.VideoQuality.LOW;
-  return varias && !destaque ? LK.VideoQuality.MEDIUM : LK.VideoQuality.HIGH;
+  if (destaque) return LK.VideoQuality.HIGH;
+  const pixels = Math.round(larguraVista * (densidade > 0 ? densidade : 1));
+  if (pixels > 0) {
+    if (pixels <= 800) return LK.VideoQuality.LOW; // a camada de 360p já enche essa janela
+    return pixels <= 1300 ? LK.VideoQuality.MEDIUM : LK.VideoQuality.HIGH;
+  }
+  return varias ? LK.VideoQuality.MEDIUM : LK.VideoQuality.HIGH;
 }

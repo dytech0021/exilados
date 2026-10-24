@@ -62,7 +62,7 @@ function retomarVideos(raiz) {
 const viewport = () => ({ largura: window.innerWidth, altura: window.innerHeight });
 const avisar = () => window.dispatchEvent(new Event('janelas-video'));
 
-export function criarJanelaLive({ titulo, conteudo, aoFechar }) {
+export function criarJanelaLive({ titulo, conteudo, aoFechar, aoMudarDeJanela = () => {} }) {
   const criar = (tag, classe, texto) => {
     const e = document.createElement(tag);
     e.className = classe;
@@ -173,6 +173,7 @@ export function criarJanelaLive({ titulo, conteudo, aoFechar }) {
     doc.body.append(doc.adoptNode(conteudo));
     retomarVideos(conteudo);
     elemento.hidden = true;
+    aoMudarDeJanela(); // o vídeo agora é de outra página: medir de novo o tamanho dele
     // Fechar a janela separada fecha a transmissão (como fechar a janela dentro do site).
     separada.addEventListener('pagehide', () => { if (!destruida) aoFechar(); });
     avisar();

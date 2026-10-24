@@ -34,3 +34,21 @@ test('uma tela 720p oferece alternativa leve sem duplicar a resolução original
   const opcoes = opcoesPublicacaoTela(lk, { largura: 1280, altura: 720, bitrate: 2_500_000, fps: 30 });
   assert.deepEqual(opcoes.screenShareSimulcastLayers, [lk.VideoPresets.h360]);
 });
+
+test('a camada segue o tamanho real da janela: janelinha pede 360p, janela média 720p, grande o máximo', () => {
+  const camada = (largura, extra) => qualidadeRecebida(lk, false, true, { larguraVista: largura, ...extra });
+  assert.equal(camada(480), lk.VideoQuality.LOW);
+  assert.equal(camada(700), lk.VideoQuality.LOW);
+  assert.equal(camada(900), lk.VideoQuality.MEDIUM);
+  assert.equal(camada(1400), lk.VideoQuality.HIGH);
+  // Numa tela de alta densidade, a mesma janela mostra mais pixels e pede mais.
+  assert.equal(camada(500), lk.VideoQuality.LOW);
+  assert.equal(camada(500, { densidade: 2 }), lk.VideoQuality.MEDIUM);
+});
+
+test('sem medida da janela, vale a regra de antes (várias abertas = 720p)', () => {
+  assert.equal(qualidadeRecebida(lk, false, true, { varias: true }), lk.VideoQuality.MEDIUM);
+  assert.equal(qualidadeRecebida(lk, false, true, {}), lk.VideoQuality.HIGH);
+  // Tela cheia pede o máximo mesmo que a medida ainda seja a antiga.
+  assert.equal(qualidadeRecebida(lk, false, true, { larguraVista: 400, destaque: true }), lk.VideoQuality.HIGH);
+});

@@ -62,6 +62,7 @@ function fecharQuadro(id) {
   const q = vista?.quadros.get(id);
   if (!q) return;
   soltarVideo(q);
+  q.observador?.disconnect();
   q.janela.destruir();
   if (document.fullscreenElement === q.elemento) document.exitFullscreen().catch(() => {});
   vista.quadros.delete(id);
@@ -211,6 +212,27 @@ function arrumar() {
   for (const q of vista.quadros.values()) atualizar(q);
 }
 
+/**
+ * Conta ao voz.js o tamanho da janela desta transmissão (e quando ela muda): a imagem passa a vir no tamanho que cabe
+ * nela. Numa janela separada o vídeo está em outra página, com o ResizeObserver e a densidade de lá.
+ */
+function acompanharTamanho(q) {
+  if (q.id === meuId()) return; // a própria tela não vem do servidor
+  const medir = () => {
+    const janela = q.video.ownerDocument?.defaultView;
+    const largura = q.video.clientWidth || q.elemento.clientWidth;
+    if (janela && largura) voz.tamanhoDaTela(q.id, largura, janela.devicePixelRatio || 1);
+  };
+  medir();
+  const Observador = q.video.ownerDocument?.defaultView?.ResizeObserver || globalThis.ResizeObserver;
+  if (Observador) {
+    q.observador = new Observador(medir);
+    q.observador.observe(q.video);
+  }
+  // Ao ir para a janela separada, o vídeo muda de página: volta a medir com o observador de lá.
+  q.remedir = () => { q.observador?.disconnect(); acompanharTamanho(q); };
+}
+
 function adicionar(id) {
   if (!vista) return;
   if (vista.quadros.has(id)) {
@@ -221,8 +243,9 @@ function adicionar(id) {
   vista.quadros.set(id, q);
   q.janela = criarJanelaLive({
     titulo: id === meuId() ? 'Sua tela' : `Tela de ${nomeDe(id)}`,
-    conteudo: q.elemento, aoFechar: () => fecharQuadro(id),
+    conteudo: q.elemento, aoFechar: () => fecharQuadro(id), aoMudarDeJanela: () => q.remedir?.(),
   });
+  acompanharTamanho(q);
   dizer(q, 'Conectando...');
   // Tela de quem está em outra sala (ou sem estar em nenhuma): entra na sala dela, como no Discord.
   const salaDela = estado.presenca.get(id)?.voz;
