@@ -92,12 +92,13 @@ function guardarCom(mapa, chave, valor, limite = 500) {
 }
 
 export function criarRotas({
-  supabase, livekit, lives, mediamtx, config, gifs = null, buscarWeb = buscar, segredoMidia = config.livesSegredo,
+  supabase, livekit, lives, mediamtx, config, gifs = null, narracao = null, buscarWeb = buscar, segredoMidia = config.livesSegredo,
   agora = () => Date.now(), registrar = console.error, versaoMinima = () => lerVersaoMinima(config.versaoSite),
 }) {
   const previas = new Map();
   const limitePrevia = criarLimite(60, 60000, agora);
   const limiteGifs = criarLimite(40, 60000, agora);
+  const limiteNarracao = criarLimite(30, 60000, agora);
   let presentes = { ate: 0, salas: null };
 
   async function quemPede(pedido) {
@@ -111,7 +112,30 @@ export function criarRotas({
     return { token, id, membro, site: String(pedido.headers['x-exilados-site'] || '') };
   }
 
+  async function membroDoAnuncio(token, id, corpo) {
+    limiteNarracao(id);
+    if (!UUID.test(corpo.usuario) || !['entrou', 'saiu'].includes(corpo.evento)) throw new Recusa(400, 'Anúncio inválido.');
+    const membro = await supabase.membro(token, corpo.usuario);
+    if (!membro?.ativo) throw new Recusa(404, 'Membro não encontrado.');
+    return membro;
+  }
+
   const rotas = {
+    // Narração de quem entra/sai: o áudio guardado, ou o que o aparelho deve gerar no demo de voz (narracao.mjs).
+    async 'POST /voz/anuncio'({ token, id }, corpo) {
+      const membro = await membroDoAnuncio(token, id, corpo);
+      const audio = narracao ? await narracao.guardado(membro.nome, corpo.evento) : null;
+      return audio || !narracao ? { audio } : { audio: null, gerar: narracao.pedido(membro.nome, corpo.evento) };
+    },
+
+    // O aparelho gerou no demo: o servidor baixa de lá (só de lá), confere e guarda para o grupo.
+    async 'POST /voz/anuncio/guardar'({ token, id }, corpo) {
+      const membro = await membroDoAnuncio(token, id, corpo);
+      const audio = narracao ? await narracao.guardar(membro.nome, corpo.evento, corpo.url) : null;
+      if (!audio) throw new Recusa(422, 'Áudio de narração inválido.');
+      return { audio };
+    },
+
     // Sala de voz do grupo ({ sala }) ou chamada numa conversa direta ({ conversa }, só os dois amigos).
     async 'POST /voz/entrar'({ token, id, membro, site }, corpo) {
       // O site de desenvolvimento ("dev") passa; os publicados mandam o número da versão (os antigos, nada).

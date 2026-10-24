@@ -39,7 +39,7 @@
       { id: V_JOGANDO, nome: 'Jogando', tipo: 'voz', ordem: 30 },
     ],
     exilados_mensagens: [],
-    exilados_lives: [{ user_id: MARINA, caminho: 'ex/AAAAAAAAAAAAAAAAAAAAAAAA', comecou_em: iso(agora - 600000), ultimo_sinal: iso(agora) }],
+    exilados_lives: [{ user_id: LUCAS, caminho: 'ex/BBBBBBBBBBBBBBBBBBBBBBBB', comecou_em: iso(agora), ultimo_sinal: iso(agora) }, { user_id: MARINA, caminho: 'ex/AAAAAAAAAAAAAAAAAAAAAAAA', comecou_em: iso(agora - 600000), ultimo_sinal: iso(agora) }],
     // Dyego e Lucas são amigos e já têm uma conversa direta (a mesma nas duas abas, para testar chamadas).
     exilados_amizades: [
       { id: 'a0000000-0000-4000-8000-000000000001', de: EU === LUCAS ? DYEGO : EU, para: LUCAS, estado: 'aceita', criada_em: iso(agora - 864e5) },

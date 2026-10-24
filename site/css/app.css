@@ -166,12 +166,14 @@ svg.icone { width: 20px; height: 20px; flex: none; fill: currentColor; display: 
 .trilho-separador { width: 32px; height: 2px; border-radius: 1px; background: #35363c; flex: none; }
 .trilho-botao.baixar { color: var(--verde); }
 .trilho-item:hover .trilho-botao.baixar { background: var(--verde); color: #fff; }
-/* App Android em janela flutuante: só o vídeo da live ou da tela, ocupando a janela. */
-body.modo-pip .centro-corpo .live { position: fixed; inset: 0; z-index: 1000; margin: 0; border-radius: 0; background: #000; }
-body.modo-pip .centro-corpo .live > :not(video) { display: none !important; }
-body.modo-pip .centro-corpo .live video { width: 100%; height: 100%; object-fit: contain; }
-/* Na janela flutuante do celular, com várias telas abertas, fica só a primeira. */
-body.modo-pip .centro-corpo .quadro-tela:not(:first-child) { display: none !important; }
+/* No PiP do Android, a última janela selecionada ocupa a tela inteira. */
+body.modo-pip .janela-live[data-foco="false"] { display: none !important; }
+body.modo-pip .janela-live[data-foco="true"] {
+  position: fixed; inset: 0 !important; width: 100% !important; height: 100% !important;
+  z-index: 1000 !important; margin: 0; border-radius: 0; background: #000;
+}
+body.modo-pip .janela-live > :not(.live), body.modo-pip .janela-live .live > :not(video) { display: none !important; }
+body.modo-pip .janela-live .live video { width: 100%; height: 100%; object-fit: contain; }
 body.modo-pip #avisos, body.modo-pip .fundo-modal, body.modo-pip .configuracoes { display: none !important; }
 .qr-celular { text-align: center; }
 .qr-celular .qr { width: 220px; max-width: 100%; margin: 4px auto 16px; }
@@ -430,50 +432,26 @@ button.ao-vivo:hover { background: var(--vermelho-escuro); }
 .live .barra .controles-som[hidden] { display: none; }
 .live .barra .rotulo { font-size: 14px; color: rgba(255, 255, 255, .85); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 
-/* Telas compartilhadas: uma ou várias lado a lado (com 3, a primeira grande à esquerda; no celular, empilhadas). */
-.telas { flex: 1; min-height: 0; display: flex; flex-direction: column; background: #000; }
-.telas-grade {
-  flex: 1; min-height: 0; display: grid; gap: 4px; padding: 4px;
-  grid-template-columns: minmax(0, 1fr); grid-auto-rows: minmax(0, 1fr);
-}
-.telas-grade[data-n="2"], .telas-grade[data-n="3"], .telas-grade[data-n="4"] { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-.telas-grade[data-n="3"] > :first-child { grid-row: span 2; }
-.telas-grade[data-n="5"], .telas-grade[data-n="6"] { grid-template-columns: repeat(3, minmax(0, 1fr)); }
-.telas-grade[data-n="1"] { padding: 0; }
-.quadro-tela { min-width: 0; border-radius: 6px; overflow: hidden; }
-.telas-grade[data-n="1"] .quadro-tela { border-radius: 0; }
+/* Cada tela compartilhada é um palco dentro da própria janela. */
+.quadro-tela { min-width: 0; overflow: hidden; }
 .quadro-tela video { height: 100%; }
-.quadro-tela .barra { gap: 8px; padding: 8px 10px; opacity: 0; transition: opacity .15s; }
-.quadro-tela:hover .barra, .quadro-tela:focus-within .barra, .telas-grade[data-n="1"] .quadro-tela .barra { opacity: 1; }
-.quadro-tela .nome-tela { font-weight: 600; font-size: 14px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; }
+.quadro-tela .barra { gap: 8px; padding: 8px 10px; }
 .quadro-tela .sobre { font-size: 15px; }
-.telas-rodape {
-  flex: none; display: flex; align-items: center; gap: 12px; flex-wrap: wrap; padding: 6px 12px; color: #fff;
-  background: #111214;
-}
-.telas-rodape .botao-icone { color: #fff; }
-.telas-rodape input[type="range"] { width: 110px; accent-color: #fff; }
-.telas-rodape .controles-som { display: flex; align-items: center; gap: 8px; }
-.sugestoes-tela { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; min-width: 0; }
-.sugestoes-tela .rotulo { font-size: 13px; color: rgba(255, 255, 255, .7); }
-@media (hover: none) { .quadro-tela .barra { opacity: 1; } }
-@media (max-width: 760px) {
-  .telas-grade[data-n] { grid-template-columns: minmax(0, 1fr); }
-  .telas-grade[data-n] > :first-child { grid-row: auto; }
-}
+.janela-live .nome-tela { display: none; }
 
 /* Lives destacadas continuam tocando enquanto a pessoa usa o resto do grupo. */
 .janela-live {
   position: fixed; display: flex; flex-direction: column; overflow: hidden; border-radius: 6px;
   background: #000; box-shadow: 0 12px 34px rgba(0, 0, 0, .62), 0 0 0 1px rgba(255, 255, 255, .18);
-  touch-action: none; container-type: inline-size;
+  container-type: inline-size;
 }
 .janela-live-titulo {
   height: 32px; flex: none; display: flex; align-items: center; gap: 4px; padding: 0 20px 0 12px;
-  background: var(--flutuante); color: var(--texto-forte); cursor: move; user-select: none;
+  background: var(--flutuante); color: var(--texto-forte); cursor: move; user-select: none; touch-action: none;
 }
 .janela-live-nome { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 13px; font-weight: 600; }
 .janela-live-titulo .botao-icone { width: 26px; height: 26px; }
+.janela-live-fechar { font-size: 24px; line-height: 1; }
 .janela-live .live { flex: 1; min-height: 0; }
 .janela-live .live video { height: 100%; }
 .janela-live .live .barra { gap: 5px; padding: 5px 20px; }
@@ -483,11 +461,21 @@ button.ao-vivo:hover { background: var(--vermelho-escuro); }
   .live .barra .assistindo { display: none; }
   .live .barra input[type="range"] { width: 65px; }
 }
-.janela-live-canto { position: absolute; width: 17px; height: 17px; z-index: 2; touch-action: none; }
-.janela-live-canto.nw { top: 0; left: 0; cursor: nwse-resize; }
-.janela-live-canto.ne { top: 0; right: 0; cursor: nesw-resize; }
-.janela-live-canto.sw { bottom: 0; left: 0; cursor: nesw-resize; }
-.janela-live-canto.se { bottom: 0; right: 0; cursor: nwse-resize; }
+.janela-live-borda { position: absolute; z-index: 2; touch-action: none; }
+.janela-live-borda.n, .janela-live-borda.s { left: 17px; right: 17px; height: 6px; cursor: ns-resize; }
+.janela-live-borda.n { top: 0; }
+.janela-live-borda.s { bottom: 0; }
+.janela-live-borda.e, .janela-live-borda.w { top: 17px; bottom: 17px; width: 6px; cursor: ew-resize; }
+.janela-live-borda.e { right: 0; }
+.janela-live-borda.w { left: 0; }
+.janela-live-borda.nw, .janela-live-borda.ne, .janela-live-borda.sw, .janela-live-borda.se { width: 17px; height: 17px; }
+.janela-live-borda.nw { top: 0; left: 0; cursor: nwse-resize; }
+.janela-live-borda.ne { top: 0; right: 0; cursor: nesw-resize; }
+.janela-live-borda.sw { bottom: 0; left: 0; cursor: nesw-resize; }
+.janela-live-borda.se { bottom: 0; right: 0; cursor: nwse-resize; }
+@container (max-width: 400px) {
+  .quadro-tela .barra .rotulo, .quadro-tela .barra .assistindo { display: none; }
+}
 
 /* ---------- avisos, menus e janelas ---------- */
 

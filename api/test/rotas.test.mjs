@@ -130,7 +130,7 @@ function livekitFalso() {
   return { estado, tratar };
 }
 
-async function montar({ agora, gifs = null, buscarWeb, versaoMinima } = {}) {
+async function montar({ agora, gifs = null, buscarWeb, versaoMinima, narracao } = {}) {
   const sb = supabaseFalso();
   const lk = livekitFalso();
   const mm = { leitores: [], expulsos: [] };
@@ -155,6 +155,7 @@ async function montar({ agora, gifs = null, buscarWeb, versaoMinima } = {}) {
     mediamtx,
     config,
     gifs,
+    narracao,
     ...(buscarWeb ? { buscarWeb } : {}),
     ...(versaoMinima ? { versaoMinima } : {}),
     segredoMidia: 'segredo-das-imagens',
@@ -187,6 +188,39 @@ test('saúde responde sem login, com a hora do servidor', async () => {
     assert.equal(r.dados.ok, true);
     assert.equal(r.dados.agora, t.relogio.t);
     assert.equal((await t.chamar('GET', '/exilados/api/saude')).status, 200);
+  } finally { t.fechar(); }
+});
+
+test('narração só de membro ativo, com o nome do banco e evento válido', async () => {
+  const pedidos = [];
+  const guardados = new Map();
+  const narracao = {
+    guardado: async (...args) => { pedidos.push(['guardado', ...args]); return guardados.get(args.join()) || null; },
+    pedido: (nome, evento) => ({ texto: `${nome} ${evento}` }),
+    guardar: async (nome, evento, url) => {
+      pedidos.push(['guardar', nome, evento, url]);
+      if (!url.startsWith('https://')) return null;
+      guardados.set([nome, evento].join(), 'audio-base64');
+      return 'audio-base64';
+    },
+  };
+  const t = await montar({ narracao });
+  try {
+    assert.equal((await t.chamar('POST', '/voz/anuncio', { corpo: { usuario: ANA, evento: 'entrou' } })).status, 401);
+    assert.equal((await t.chamar('POST', '/voz/anuncio', { quem: FORA, corpo: { usuario: ANA, evento: 'entrou' } })).status, 403);
+    assert.equal((await t.chamar('POST', '/voz/anuncio', { quem: DONO, corpo: { usuario: ANA, evento: 'outro' } })).status, 400);
+    assert.equal((await t.chamar('POST', '/voz/anuncio', { quem: DONO, corpo: { usuario: FORA, evento: 'entrou' } })).status, 404);
+    // Ainda sem áudio: o aparelho recebe o que gerar, com o nome do banco (não o que veio no pedido).
+    const r = await t.chamar('POST', '/voz/anuncio', { quem: DONO, corpo: { usuario: ANA, evento: 'entrou', nome: 'Nome falso' } });
+    assert.equal(r.status, 200);
+    assert.deepEqual(r.dados, { audio: null, gerar: { texto: 'Ana entrou' } });
+    const ruim = await t.chamar('POST', '/voz/anuncio/guardar', { quem: DONO, corpo: { usuario: ANA, evento: 'entrou', url: 'http://x' } });
+    assert.equal(ruim.status, 422);
+    const g = await t.chamar('POST', '/voz/anuncio/guardar', { quem: DONO, corpo: { usuario: ANA, evento: 'entrou', url: 'https://ok' } });
+    assert.deepEqual(g.dados, { audio: 'audio-base64' });
+    const depois = await t.chamar('POST', '/voz/anuncio', { quem: DONO, corpo: { usuario: ANA, evento: 'entrou' } });
+    assert.deepEqual(depois.dados, { audio: 'audio-base64' });
+    assert.ok(pedidos.every(([, nome]) => nome === 'Ana'));
   } finally { t.fechar(); }
 });
 

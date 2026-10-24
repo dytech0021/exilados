@@ -7,6 +7,8 @@ outros, com o jeito do Discord.
   instalado como aplicativo).
 - **Compartilhar a tela:** pelo site no computador, dentro da sala de voz (botão de tela no painel de voz); quem
   está na sala assiste no PC ou no celular.
+- **Assistir:** cada live ou tela abre numa janela própria sobre o chat. Arraste o título para mover e as bordas
+  ou cantos para mudar a largura e a altura; fechar uma janela mantém as outras abertas.
 - **Programa para Windows:** para transmitir um jogo com o som só dele (isolado do resto do PC).
 - **Entrar no grupo:** só com um link de convite de um membro.
 

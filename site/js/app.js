@@ -20,7 +20,7 @@ import {
   agoraServidor, avisar, estado, meuId, nomeDe, ouvir,
 } from './estado.js';
 import { cartaoPerfil, desenharSalas, desenharTopoGrupo, iniciarGrupo } from './grupo.js';
-import { fecharLive, fecharTodasLives, haLivesAbertas, montarLive } from './live.js';
+import { fecharTodasLives, haLivesAbertas, montarLive } from './live.js';
 import { liveNoAr } from './presenca.js';
 import {
   atualizarPrograma, iniciarPrograma, noPrograma, quandoAtualizacao,
@@ -50,8 +50,6 @@ const partes = {
 const celular = () => window.matchMedia('(max-width: 760px)').matches;
 const CHAVE_SALA = 'exilados-ultima-sala';
 const NOME = NOME_COM_VERSAO;
-// Vistas de assistir (live do programa do Windows ou tela compartilhada na voz): "Voltar" leva para antes delas.
-const assistindo = (tipo) => tipo === 'live' || tipo === 'tela';
 let vistaAnterior = null;
 
 // ---------- painéis (celular) e topo ----------
@@ -77,7 +75,7 @@ function gestos() {
   app.addEventListener('touchstart', (e) => {
     if (!celular() || e.touches.length !== 1) return;
     const t = e.touches[0];
-    if (e.target.closest('input[type="range"], .mensagens .imagem, video')) return;
+    if (e.target.closest('input[type="range"], .mensagens .imagem, video, .janela-live')) return;
     inicio = { x: t.clientX, y: t.clientY, quando: Date.now() };
   }, { passive: true });
   app.addEventListener('touchend', (e) => {
@@ -141,30 +139,6 @@ function salaDeTexto(id) {
 function desenharCentro() {
   const v = estado.vista;
   const topo = partes.topo;
-  if (v.tipo === 'live') {
-    const m = estado.membros.get(v.id) || { user_id: v.id, nome: 'Alguém' };
-    limpar(topo, botaoMenu(),
-      el('div', { class: 'titulo' }, avatar(m, { tamanho: 24 }), el('span', { text: m.nome }), el('span', { class: 'ao-vivo', text: 'Ao vivo' })),
-      botaoMembros(), botaoIcone('fechar', 'Fechar a live', voltar));
-    montarLive(partes.centro, v.id, voltar, () => irPara({ tipo: 'live', id: v.id }));
-    return;
-  }
-  if (v.tipo === 'tela') {
-    // Uma tela: o nome de quem transmite; várias lado a lado: quantas são.
-    const titulo = el('div', { class: 'titulo' });
-    const desenharTitulo = (ids) => {
-      const um = ids.length === 1 ? ids[0] : null;
-      const m = um && (estado.membros.get(um) || { user_id: um, nome: 'Alguém' });
-      const salaVoz = estado.presenca.get(ids[0])?.voz;
-      limpar(titulo, um ? avatar(m, { tamanho: 24 }) : icone('tela'),
-        el('span', { text: um ? (um === meuId() ? 'Sua tela' : m.nome) : `${ids.length} transmissões` }),
-        el('span', { class: 'ao-vivo', text: 'Ao vivo' }), salaVoz ? el('span', { class: 'sub', text: nomeDaSala(salaVoz) }) : null);
-    };
-    desenharTitulo([v.id]);
-    limpar(topo, botaoMenu(), titulo, botaoMembros(), botaoIcone('fechar', 'Fechar as transmissões', voltar));
-    montarTela(partes.centro, v.id, voltar, desenharTitulo);
-    return;
-  }
   if (v.tipo === 'amigos') {
     desenharAmigos(partes.centro, topo);
     return;
@@ -202,9 +176,12 @@ function desenharCentro() {
 }
 
 function irPara(vista) {
-  if (estado.vista.tipo === 'live' && vista.tipo !== 'live') fecharLive();
-  if (estado.vista.tipo === 'tela' && vista.tipo !== 'tela') fecharTela();
-  if (assistindo(vista.tipo) && !assistindo(estado.vista.tipo)) vistaAnterior = { ...estado.vista };
+  if (vista.tipo === 'live' || vista.tipo === 'tela') {
+    if (vista.tipo === 'live') montarLive(partes.centro, vista.id);
+    else montarTela(partes.centro, vista.id);
+    if (celular()) fecharPaineis();
+    return;
+  }
   fecharConversa();
   estado.vista = { ...vista };
   if (vista.tipo === 'grupo') estado.modo = 'grupo';
@@ -213,10 +190,6 @@ function irPara(vista) {
   desenharCentro();
   avisar('vista');
   if (celular()) fecharPaineis();
-}
-
-function voltar() {
-  irPara(vistaAnterior && !assistindo(vistaAnterior.tipo) ? vistaAnterior : { tipo: 'grupo', id: null });
 }
 
 const nav = {
@@ -268,7 +241,7 @@ function acompanhar() {
   });
   ouvir('telaComecou', (id) => {
     const salaVoz = estado.presenca.get(id)?.voz;
-    if (!salaVoz || (estado.vista.tipo === 'tela' && telasAbertas().includes(id))) return;
+    if (!salaVoz || telasAbertas().includes(id)) return;
     aviso(`${nomeDe(id)} está compartilhando a tela na ${nomeDaSala(salaVoz)}`, {
       tipo: 'vivo',
       duracao: 12000,
@@ -332,7 +305,7 @@ async function abrirApp() {
   ouvir('voz', () => avisarApp(voz.voz.situacao !== 'desligada', voz.voz.sala ? nomeDaSala(voz.voz.sala) : ''));
   // Com live ou tela compartilhada na tela, o app vira janela flutuante ao sair dele; nela, só o vídeo aparece.
   const avisarVideo = avisoDeVideo(window.ExiladosAndroid);
-  ouvir('vista', () => avisarVideo(estado.vista?.tipo));
+  window.addEventListener('janelas-video', () => avisarVideo(document.querySelector('.janela-live') ? 'live' : null));
   window.exiladosJanelaFlutuante = (ligada) => document.body.classList.toggle('modo-pip', Boolean(ligada));
   acompanhar();
   gestos();
@@ -343,7 +316,7 @@ async function abrirApp() {
 }
 
 /** Numa sala de voz ou assistindo a algo: o programa não reinicia sem perguntar. */
-const ocupado = () => voz.voz.situacao !== 'desligada' || assistindo(estado.vista?.tipo) || haLivesAbertas();
+const ocupado = () => voz.voz.situacao !== 'desligada' || telasAbertas().length > 0 || haLivesAbertas();
 
 /**
  * Botão de baixar no trilho (como o "Baixar aplicativos" do Discord): o programa no navegador do Windows e o app no
@@ -468,7 +441,11 @@ async function iniciar() {
   sb.auth.onAuthStateChange((evento, sessao) => {
     if (evento === 'PASSWORD_RECOVERY') setTimeout(telaNovaSenha);
     else if (evento === 'SIGNED_IN' && sessao && !estado.eu) setTimeout(() => decidir(sessao.user));
-    else if (evento === 'SIGNED_OUT' && estado.eu) location.replace(BASE);
+    else if (evento === 'SIGNED_OUT' && estado.eu) {
+      fecharTodasLives();
+      fecharTela();
+      location.replace(BASE);
+    }
   });
   const { data: { session: sessao } } = await sb.auth.getSession();
   if (sessao) return decidir(sessao.user);

@@ -8,9 +8,9 @@
 // A voz de todos chega sozinha; a tela de alguém (vídeo e som) só chega para quem abriu a transmissão dela, para não
 // gastar a internet de quem não está assistindo.
 import { LIVEKIT_SCRIPT } from './config.js';
-import { atualizarPresenca, avisarQueFalo } from './dados.js';
+import { atualizarPresenca, atualizarVozLocal, avisarQueFalo } from './dados.js';
 import { avisar, estado, meuId, nomeDe } from './estado.js';
-import { anunciar } from './anuncio.js';
+import { criarNarrador, gerarNoServicoDeVoz } from './anuncio.js';
 import { api } from './supa.js';
 import { opcoesPublicacaoTela, qualidadeRecebida } from './qualidade-tela.js';
 import { conectarFiltroRuido } from './filtro-ruido.js';
@@ -47,6 +47,15 @@ let microfone = null; // { bruto, ctx, ganho, analisador, faixa, trilha }
 let tela = null; // a própria tela compartilhada: { fluxo, video, som }
 let saindo = false;
 const elementos = new Map(); // faixa -> <audio>
+const narrador = criarNarrador({ buscarAudio: buscarAnuncio });
+
+/** Áudio da narração guardado no servidor; sem ele, gera neste aparelho e manda o servidor guardar para todos. */
+async function buscarAnuncio(usuario, evento) {
+  const r = await api.chamar('/voz/anuncio', { usuario, evento });
+  if (r.audio || !r.gerar) return r;
+  return api.chamar('/voz/anuncio/guardar', { usuario, evento, url: await gerarNoServicoDeVoz(r.gerar) });
+}
+let preparoDosAnuncios = Promise.resolve();
 
 // ---------- preferências (guardadas neste aparelho, por conta) ----------
 
@@ -394,6 +403,7 @@ function soltarTela() {
 }
 
 function limpar() {
+  narrador.cancelar();
   for (const faixa of [...elementos.keys()]) desanexar(faixa);
   reforco?.close().catch(() => {});
   reforco = null;
@@ -405,6 +415,7 @@ function limpar() {
   silenciadas.clear();
   destaque = null;
   sala = null;
+  estado.vozLocal = null;
   estado.falandoNaSala.clear();
   avisarQueFalo(false);
   avisar('telas');
@@ -416,8 +427,46 @@ const FORA_DA_VOZ = { voz: null, tela: false, assistindo: null };
 /** Lê em voz alta quem entrou ou saiu da sala (se a opção estiver ligada e o som não estiver desligado). */
 function narrar(participante, evento) {
   try {
-    anunciar(nomeDe(participante.identity), evento, { ligado: preferencias().anunciarEntradas, surdo: voz.surdo });
+    const room = sala;
+    narrador.anunciar(participante.identity, nomeDe(participante.identity), evento, {
+      ligado: preferencias().anunciarEntradas, surdo: voz.surdo, permitido: () => podeNarrar(room),
+    }).catch(() => {});
   } catch { /* sem leitura em voz alta */ }
+}
+
+function podeNarrar(room) {
+  return room && room === sala && voz.situacao === 'conectada' && preferencias().anunciarEntradas && !voz.surdo;
+}
+
+function prepararAnuncios(room = sala) {
+  if (!podeNarrar(room)) return;
+  // Quem já está na sala vem primeiro; prepara também os demais, antes de eles entrarem.
+  // Até 24 pedidos, em sequência por navegador, para respeitar o limite do serviço.
+  // A ordem dos que não estão na sala é sorteada: cada aparelho gera nomes diferentes ao mesmo tempo, e o servidor
+  // guarda para todos (a cota grátis do serviço é por internet).
+  const fora = [...estado.membros.keys()].filter((id) => !room.remoteParticipants.has(id)).sort(() => Math.random() - 0.5);
+  const ids = [...new Set([...room.remoteParticipants.keys(), ...fora])]
+    .filter((id) => estado.membros.get(id)?.ativo).slice(0, 12);
+  preparoDosAnuncios = preparoDosAnuncios.then(async () => {
+    for (const id of ids) {
+      for (const evento of ['entrou', 'saiu']) {
+        if (!podeNarrar(room)) return;
+        await narrador.preparar(id, nomeDe(id), evento);
+      }
+    }
+  }).catch(() => {});
+}
+
+function sincronizarParticipantes(room, { entrou, saiu } = {}) {
+  if (room !== sala || voz.situacao !== 'conectada') return;
+  const ids = new Set([meuId(), ...room.remoteParticipants.keys()]);
+  if (entrou) ids.add(entrou);
+  if (saiu) {
+    ids.delete(saiu);
+    estado.falandoNaSala.delete(saiu);
+    estado.falando.delete(saiu);
+  }
+  atualizarVozLocal(voz.sala, ids);
 }
 
 function montarEventos(LKC, room) {
@@ -444,9 +493,19 @@ function montarEventos(LKC, room) {
         console.error('Exilados: erro ao tratar quem está falando:', falha);
       }
     })
-    .on(E.Reconnecting, () => { voz.situacao = 'reconectando'; mudou(); })
+    .on(E.Reconnecting, () => {
+      if (room !== sala) return;
+      voz.situacao = 'reconectando';
+      atualizarVozLocal(null);
+      mudou();
+    })
     // A sinalização pode se reconectar enquanto o áudio continua; só marca queda se a mídia cair.
-    .on(E.Reconnected, () => { voz.situacao = 'conectada'; mudou(); })
+    .on(E.Reconnected, () => {
+      if (room !== sala) return;
+      voz.situacao = 'conectada';
+      sincronizarParticipantes(room);
+      mudou();
+    })
     .on(E.AudioPlaybackStatusChanged, () => {
       if (!room.canPlaybackAudio) {
         aviso('O navegador segurou o som da sala.', { acao: { rotulo: 'Ativar som', fn: () => room.startAudio() }, duracao: 0 });
@@ -455,10 +514,14 @@ function montarEventos(LKC, room) {
     .on(E.MediaDevicesChanged, () => avisar('dispositivos'))
     // O LiveKit só avisa quem entra depois que já estamos na sala (não quem já estava lá), e quem sai enquanto estamos.
     .on(E.ParticipantConnected, (participante) => {
+      if (room !== sala) return;
+      sincronizarParticipantes(room, { entrou: participante.identity });
       mudou();
       narrar(participante, 'entrou');
     })
     .on(E.ParticipantDisconnected, (participante) => {
+      if (room !== sala) return;
+      sincronizarParticipantes(room, { saiu: participante.identity });
       mudou();
       avisar('telas');
       narrar(participante, 'saiu');
@@ -531,13 +594,17 @@ export async function entrar(salaId) {
     for (const participante of room.remoteParticipants.values()) {
       for (const pub of participante.trackPublications.values()) decidirRecebimento(pub, participante);
     }
-    voz.situacao = 'conectada';
+    // Inicializa antes de avisar que a sala conectou: uma janela de tela já aberta pode assinar
+    // a transmissão durante esse aviso e publicar `assistindo`, que não deve ser zerado depois.
     atualizarPresenca({
       voz: salaId, mudo: voz.mudo || voz.surdo, surdo: voz.surdo, tela: false, assistindo: null,
     });
+    voz.situacao = 'conectada';
+    sincronizarParticipantes(room);
     avisar('telas');
     mudou();
     await room.startAudio().catch(() => {});
+    prepararAnuncios(room);
     if (ANDROID && !preferencias().dicaVolume) {
       prefs.dicaVolume = true;
       guardar();
@@ -846,8 +913,10 @@ export async function alternarSurdo() {
   } else {
     prefs.mudoAntesDeSurdo = voz.mudo;
     voz.surdo = true;
+    narrador.cancelar();
   }
   await aplicarCalado();
+  if (!voz.surdo) prepararAnuncios();
 }
 
 // ---------- dispositivos (Configurações → Voz e áudio) ----------
@@ -967,6 +1036,8 @@ export async function definirPortaDeVoz(ligada) {
 /** Ler em voz alta o nome de quem entra e de quem sai da sala. */
 export function definirAnunciarEntradas(ligado) {
   preferencias().anunciarEntradas = Boolean(ligado);
+  if (ligado) prepararAnuncios();
+  else narrador.cancelar();
   guardar();
 }
 

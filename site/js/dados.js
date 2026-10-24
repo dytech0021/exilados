@@ -2,7 +2,7 @@
 // privado "exilados" (presença, quem está falando, quem está digitando e o toque das chamadas).
 import { avisar, estado, meuId, nomeDe, outroDaConversa } from './estado.js';
 import { lidaEmOutroLugar } from './lidas.js';
-import { LimitadorFala, liveNoAr, resumirPresenca, vigiarAusencia } from './presenca.js';
+import { idsNaSala, LimitadorFala, liveNoAr, resumirPresenca, vigiarAusencia } from './presenca.js';
 import { API } from './config.js';
 import { api, conferir, sb } from './supa.js';
 import { preparar } from './ui.js';
@@ -11,9 +11,13 @@ let canalDados = null;
 let canalGrupo = null;
 let caiu = false;
 const minhaPresenca = {
+  aba: globalThis.crypto?.randomUUID?.() || `${Date.now()}-${Math.random()}`,
   status: 'online', voz: null, mudo: false, surdo: false, tela: false, assistindo: null, desde: 0,
 };
 let presencaSincronizada = false;
+let presencaRecebida = {};
+const mudancasDeVoz = new Map();
+const saidasConhecidas = new Map(); // sala -> Map(pessoa -> última saída vista pela conexão LiveKit)
 const caminhosConhecidos = new Map();
 
 function porOrdem(a, b) {
@@ -129,7 +133,8 @@ function assinarGrupo() {
   canalGrupo
     .on('presence', { event: 'sync' }, () => {
       const antes = estado.presenca;
-      estado.presenca = resumirPresenca(canalGrupo.presenceState());
+      presencaRecebida = canalGrupo.presenceState();
+      aplicarPresenca();
       // Alguém começou a compartilhar a tela (na primeira sincronia, o que já estava no ar não é novidade).
       if (presencaSincronizada) {
         for (const [id, p] of estado.presenca) {
@@ -137,10 +142,6 @@ function assinarGrupo() {
         }
       }
       presencaSincronizada = true;
-      for (const id of [...estado.falando]) {
-        if (!estado.presenca.get(id)?.voz) estado.falando.delete(id);
-      }
-      avisar('presenca');
     })
     .on('broadcast', { event: 'digitando' }, ({ payload }) => {
       if (!payload?.id || !payload.alvo || payload.id === meuId()) return;
@@ -171,7 +172,41 @@ function assinarGrupo() {
 export function atualizarPresenca(parcial) {
   Object.assign(minhaPresenca, parcial);
   if (parcial.voz !== undefined) minhaPresenca.desde = parcial.voz ? Date.now() : 0;
+  aplicarPresenca();
   canalGrupo?.track({ ...minhaPresenca }).catch(() => {});
+}
+
+function aplicarPresenca() {
+  const antes = estado.presenca;
+  estado.presenca = resumirPresenca(presencaRecebida, { id: meuId(), meta: { ...minhaPresenca } });
+  const agora = Date.now();
+  for (const [id, p] of antes) {
+    if (p.voz && p.voz !== estado.presenca.get(id)?.voz) mudancasDeVoz.set(id, agora);
+  }
+  // Só precisamos proteger consultas ainda válidas (incluindo uma resposta que estava em trânsito).
+  for (const [id, quando] of mudancasDeVoz) if (agora - quando > 40000) mudancasDeVoz.delete(id);
+  for (const id of [...estado.falando]) {
+    if (!estado.presenca.get(id)?.voz) estado.falando.delete(id);
+  }
+  avisar('presenca');
+}
+
+/** O roster da conexão aberta substitui a consulta periódica só na sala que estamos vendo por ela. */
+export function atualizarVozLocal(sala, ids) {
+  const novos = new Set(ids);
+  const anterior = estado.vozLocal;
+  if (sala) {
+    if (!saidasConhecidas.has(sala)) saidasConhecidas.set(sala, new Map());
+    const saidas = saidasConhecidas.get(sala);
+    if (anterior?.sala === sala) {
+      for (const id of anterior.ids) {
+        if (!novos.has(id)) saidas.set(id, { quando: Date.now(), desde: estado.presenca.get(id)?.desde || 0 });
+      }
+    }
+    for (const id of novos) saidas.delete(id);
+  }
+  estado.vozLocal = sala ? { sala, ids: [...novos] } : null;
+  avisar('presenca');
 }
 
 const limitador = new LimitadorFala((falando) => {
@@ -218,9 +253,12 @@ export function enviarChamada(conversa, acao) {
 // Quem está mesmo em cada sala de voz, pelo LiveKit (a presença de quem caiu sem avisar pode ficar para trás).
 async function acompanharVozServidor() {
   if (document.hidden) return;
+  const inicio = Date.now();
   try {
     const { salas } = await api.chamar('/voz/presentes');
-    estado.vozServidor = { quando: Date.now(), salas: salas || {} };
+    // Uma consulta mais lenta não substitui outra mais recente.
+    if (estado.vozServidor && inicio < (estado.vozServidor.inicio ?? estado.vozServidor.quando)) return;
+    estado.vozServidor = { inicio, quando: Date.now(), salas: salas || {} };
     avisar('presenca');
   } catch {
     // Sem o servidor, vale a presença.
@@ -229,20 +267,11 @@ async function acompanharVozServidor() {
 
 /** Quem mostrar numa sala de voz: a presença, corrigida pelo LiveKit quando se sabe (até 40 s de idade). */
 export function quemNaSala(salaId) {
-  const pelaPresenca = [...estado.presenca.entries()].filter(([, p]) => p.voz === salaId);
-  const servidor = estado.vozServidor;
-  if (!servidor || Date.now() - servidor.quando > 40000) return pelaPresenca.map(([id]) => id);
-  const noServidor = new Set(servidor.salas[salaId] || []);
-  const ids = new Set();
-  for (const [id, p] of pelaPresenca) {
-    // Quem acabou de entrar pode ainda não aparecer no LiveKit; quem saiu sem avisar some.
-    if (noServidor.has(id) || id === meuId() || Date.now() - (p.desde || 0) < 30000) ids.add(id);
-  }
-  for (const id of noServidor) {
-    const p = estado.presenca.get(id);
-    if (!p?.voz || p.voz === salaId) ids.add(id);
-  }
-  return [...ids];
+  return idsNaSala(salaId, {
+    presenca: estado.presenca, servidor: estado.vozServidor, local: estado.vozLocal,
+    mudancas: mudancasDeVoz, meu: meuId(),
+    saidas: saidasConhecidas.get(salaId),
+  });
 }
 
 async function lerRecursos() {

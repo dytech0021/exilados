@@ -1,0 +1,109 @@
+// Janelas de vídeo independentes, compartilhadas pelas lives do programa e telas da sala de voz.
+import { ALTURA_TITULO, MARGEM, mover, redimensionar } from './flutuante.js';
+
+const abertas = new Set();
+const viewport = () => ({ largura: window.innerWidth, altura: window.innerHeight });
+const avisar = () => window.dispatchEvent(new Event('janelas-video'));
+
+export function criarJanelaLive({ titulo, conteudo, aoFechar }) {
+  const criar = (tag, classe, texto) => {
+    const e = document.createElement(tag);
+    e.className = classe;
+    if (texto) e.textContent = texto;
+    return e;
+  };
+  const nome = criar('span', 'janela-live-nome', titulo);
+  const fechar = criar('button', 'botao-icone janela-live-fechar', '×');
+  fechar.type = 'button';
+  fechar.title = 'Fechar esta transmissão';
+  fechar.setAttribute('aria-label', fechar.title);
+  fechar.addEventListener('click', aoFechar);
+  const barra = criar('div', 'janela-live-titulo');
+  barra.append(nome, fechar);
+  const elemento = criar('section', 'janela-live');
+  elemento.setAttribute('aria-label', titulo);
+  elemento.append(barra, conteudo);
+  const tela = viewport();
+  const largura = Math.max(1, Math.min(480, tela.largura - MARGEM * 2));
+  const alturaVideo = Math.max(1, Math.min(270, tela.altura - ALTURA_TITULO - MARGEM * 2));
+  const deslocamento = (abertas.size % 8) * 28;
+  let geometria = mover({ x: tela.largura - largura - 24 - deslocamento, y: 80 + deslocamento, largura, alturaVideo }, 0, 0, tela);
+  let pararArraste = null;
+  const aplicar = (nova) => {
+    geometria = nova;
+    Object.assign(elemento.style, {
+      left: `${nova.x}px`, top: `${nova.y}px`, width: `${nova.largura}px`, height: `${nova.alturaVideo + ALTURA_TITULO}px`,
+    });
+  };
+  const focar = () => {
+    abertas.delete(janela);
+    abertas.add(janela);
+    let ordem = 80;
+    for (const outra of abertas) {
+      outra.elemento.style.zIndex = String(ordem++);
+      outra.elemento.dataset.foco = String(outra === janela);
+    }
+  };
+  const iniciar = (evento, borda) => {
+    if (evento.button !== 0 || document.fullscreenElement) return;
+    evento.preventDefault();
+    focar();
+    pararArraste?.();
+    const alvo = evento.currentTarget;
+    const origem = { ...geometria };
+    const { clientX: x, clientY: y, pointerId } = evento;
+    alvo.setPointerCapture(pointerId);
+    const arrastar = (e) => aplicar(borda
+      ? redimensionar(origem, borda, e.clientX - x, e.clientY - y, viewport())
+      : mover(origem, e.clientX - x, e.clientY - y, viewport()));
+    const parar = () => {
+      alvo.removeEventListener('pointermove', arrastar);
+      alvo.removeEventListener('pointerup', parar);
+      alvo.removeEventListener('pointercancel', parar);
+      alvo.removeEventListener('lostpointercapture', parar);
+      pararArraste = null;
+    };
+    pararArraste = parar;
+    alvo.addEventListener('pointermove', arrastar);
+    alvo.addEventListener('pointerup', parar);
+    alvo.addEventListener('pointercancel', parar);
+    alvo.addEventListener('lostpointercapture', parar);
+  };
+  barra.addEventListener('pointerdown', (e) => { if (!e.target.closest('button')) iniciar(e); });
+  elemento.addEventListener('pointerdown', focar);
+  for (const borda of ['n', 's', 'e', 'w', 'nw', 'ne', 'sw', 'se']) {
+    const alca = criar('div', `janela-live-borda ${borda}`);
+    alca.dataset.borda = borda;
+    alca.setAttribute('aria-label', 'Redimensionar transmissão');
+    alca.addEventListener('pointerdown', (e) => iniciar(e, borda));
+    elemento.append(alca);
+  }
+  const ajustar = () => {
+    const tela = viewport();
+    aplicar(mover({ ...geometria,
+      largura: Math.max(1, Math.min(geometria.largura, tela.largura - MARGEM * 2)),
+      alturaVideo: Math.max(1, Math.min(geometria.alturaVideo, tela.altura - ALTURA_TITULO - MARGEM * 2)),
+    }, 0, 0, tela));
+  };
+  let destruida = false;
+  const janela = {
+    elemento, focar,
+    definirTitulo(texto) { nome.textContent = texto; elemento.setAttribute('aria-label', texto); },
+    destruir() {
+      if (destruida) return;
+      destruida = true;
+      pararArraste?.();
+      window.removeEventListener('resize', ajustar);
+      abertas.delete(janela);
+      elemento.remove();
+      [...abertas].at(-1)?.focar();
+      avisar();
+    },
+  };
+  aplicar(geometria);
+  document.getElementById('app').append(elemento);
+  window.addEventListener('resize', ajustar);
+  focar();
+  avisar();
+  return janela;
+}

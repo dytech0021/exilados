@@ -2,101 +2,12 @@
 // exilados-api entrega a membros ativos. Reconecta sozinho; avisa "A live terminou" quando ela acaba.
 import { AO_VIVO } from './config.js';
 import { estado, meuId, ouvir } from './estado.js';
-import { ALTURA_TITULO, MARGEM, mover, redimensionar } from './flutuante.js';
+import { criarJanelaLive } from './janela-live.js';
 import { vigiarVideo } from './estabilidade.js';
 import { api } from './supa.js';
 import { botaoIcone, el, icone, limpar } from './ui.js';
 
-let atual = null;
 const flutuantes = new Map();
-
-function focar(a) {
-  if (!a.flutuante) return;
-  flutuantes.delete(a.usuario);
-  flutuantes.set(a.usuario, a);
-  let ordem = 80;
-  for (const live of flutuantes.values()) live.flutuante.style.zIndex = String(ordem++);
-}
-
-function aplicarGeometria(a, geometria) {
-  a.geometria = geometria;
-  Object.assign(a.flutuante.style, {
-    left: `${geometria.x}px`, top: `${geometria.y}px`,
-    width: `${geometria.largura}px`, height: `${geometria.alturaVideo + ALTURA_TITULO}px`,
-  });
-}
-
-function ajustarFlutuante(a) {
-  if (!a.flutuante) return;
-  const { largura, altura } = { largura: window.innerWidth, altura: window.innerHeight };
-  const proporcao = a.video.videoWidth && a.video.videoHeight ? a.video.videoWidth / a.video.videoHeight : a.proporcao || 16 / 9;
-  a.proporcao = proporcao;
-  const maximo = Math.max(1, Math.min(largura - MARGEM * 2, (altura - ALTURA_TITULO - MARGEM * 2) * proporcao));
-  const w = Math.min(a.geometria.largura, maximo);
-  const nova = mover({ ...a.geometria, largura: w, alturaVideo: w / proporcao }, 0, 0, { largura, altura });
-  aplicarGeometria(a, nova);
-}
-
-function iniciarArraste(a, e, canto = null) {
-  if (e.button !== 0) return;
-  e.preventDefault();
-  focar(a);
-  const origem = { ...a.geometria };
-  const x = e.clientX, y = e.clientY;
-  const alvo = e.currentTarget;
-  alvo.setPointerCapture(e.pointerId);
-  const moverPonteiro = (evento) => {
-    const tela = { largura: window.innerWidth, altura: window.innerHeight };
-    const dx = evento.clientX - x, dy = evento.clientY - y;
-    aplicarGeometria(a, canto
-      ? redimensionar(origem, canto, dx, dy, a.proporcao, tela)
-      : mover(origem, dx, dy, tela));
-  };
-  const parar = () => {
-    alvo.removeEventListener('pointermove', moverPonteiro);
-    alvo.removeEventListener('pointerup', parar);
-    alvo.removeEventListener('pointercancel', parar);
-  };
-  alvo.addEventListener('pointermove', moverPonteiro);
-  alvo.addEventListener('pointerup', parar);
-  alvo.addEventListener('pointercancel', parar);
-}
-
-function flutuar(a) {
-  if (a.flutuante || atual !== a) return;
-  atual = null;
-  const nome = estado.membros.get(a.usuario)?.nome || 'Live';
-  const titulo = el('div', { class: 'janela-live-titulo' },
-    el('span', { class: 'janela-live-nome', text: nome }),
-    botaoIcone('abrirJanela', 'Voltar ao painel', () => a.aoAbrir()),
-    botaoIcone('fechar', 'Fechar esta live', () => fecharInstancia(a)));
-  titulo.addEventListener('pointerdown', (e) => { if (!e.target.closest('button')) iniciarArraste(a, e); });
-  const janela = el('section', { class: 'janela-live', attrs: { 'aria-label': `Live de ${nome}` } }, titulo, a.palco);
-  for (const canto of ['nw', 'ne', 'sw', 'se']) {
-    janela.append(el('div', { class: `janela-live-canto ${canto}`, attrs: { 'aria-label': 'Redimensionar live' },
-      onpointerdown: (e) => iniciarArraste(a, e, canto) }));
-  }
-  a.flutuante = janela;
-  a.botaoFlutuar.title = 'Voltar ao painel';
-  a.botaoFlutuar.setAttribute('aria-label', 'Voltar ao painel');
-  a.proporcao = a.video.videoWidth && a.video.videoHeight ? a.video.videoWidth / a.video.videoHeight : 16 / 9;
-  const tela = { largura: window.innerWidth, altura: window.innerHeight };
-  const largura = Math.max(1, Math.min(480, tela.largura - MARGEM * 2, (tela.altura - ALTURA_TITULO - MARGEM * 2) * a.proporcao));
-  const deslocamento = flutuantes.size * 30;
-  aplicarGeometria(a, {
-    x: Math.max(MARGEM, tela.largura - largura - 24 - deslocamento),
-    y: Math.max(MARGEM, tela.altura - largura / a.proporcao - ALTURA_TITULO - 24 - deslocamento),
-    largura, alturaVideo: largura / a.proporcao,
-  });
-  document.getElementById('app').append(janela);
-  janela.addEventListener('pointerdown', () => focar(a));
-  a.aoRedimensionar = () => ajustarFlutuante(a);
-  window.addEventListener('resize', a.aoRedimensionar);
-  flutuantes.set(a.usuario, a);
-  focar(a);
-  a.video.play().catch(() => {});
-  a.aoFechar();
-}
 
 function juntarCaminhos(conexao) {
   if (conexao.iceGatheringState === 'complete') return Promise.resolve();
@@ -111,27 +22,15 @@ function juntarCaminhos(conexao) {
   });
 }
 
-export function fecharLive() {
-  if (!atual) return;
-  const a = atual;
-  fecharInstancia(a);
-}
-
 export function fecharTodasLives() {
-  fecharLive();
   for (const a of [...flutuantes.values()]) fecharInstancia(a);
 }
 
-export const haLivesAbertas = () => atual !== null || flutuantes.size > 0;
+export const haLivesAbertas = () => flutuantes.size > 0;
 
 function fecharInstancia(a) {
-  if (atual === a) atual = null;
-  if (a.flutuante) {
-    flutuantes.delete(a.usuario);
-    a.flutuante.remove();
-    a.flutuante = null;
-    window.removeEventListener('resize', a.aoRedimensionar);
-  }
+  flutuantes.delete(a.usuario);
+  a.janela?.destruir();
   a.encerrada = true;
   clearTimeout(a.timerRetentar);
   clearTimeout(a.timerQueda);
@@ -178,8 +77,7 @@ function terminou(a) {
   clearInterval(a.timerVigia);
   a.video.srcObject = null;
   dizer(a, 'A live terminou.', { botao: el('button', {
-    class: 'botao', text: a.flutuante ? 'Fechar' : 'Voltar',
-    onclick: () => a.flutuante ? fecharInstancia(a) : a.aoFechar(),
+    class: 'botao', text: 'Fechar', onclick: () => fecharInstancia(a),
   }) });
   a.assistindo.textContent = '';
 }
@@ -289,22 +187,12 @@ function telaCheia(a) {
   else a.video.webkitEnterFullscreen?.();
 }
 
-/** Monta a live de `usuario` em `corpo`. `aoFechar` volta para a tela anterior. */
-export function montarLive(corpo, usuario, aoFechar, aoAbrir) {
-  fecharLive();
+/** Abre a live numa janela independente; reabrir traz a existente para frente. */
+export function montarLive(_corpo, usuario) {
   const existente = flutuantes.get(usuario);
   if (existente?.encerrada) fecharInstancia(existente);
   else if (existente) {
-    flutuantes.delete(usuario);
-    limpar(corpo, existente.palco);
-    existente.flutuante.remove();
-    existente.flutuante = null;
-    window.removeEventListener('resize', existente.aoRedimensionar);
-    existente.botaoFlutuar.title = 'Janela flutuante';
-    existente.botaoFlutuar.setAttribute('aria-label', 'Janela flutuante');
-    existente.aoFechar = aoFechar;
-    existente.aoAbrir = aoAbrir;
-    atual = existente;
+    existente.janela.focar();
     return;
   }
   // A própria live toca sem som: o programa capta o som do computador, e o som dela voltaria para a live (retorno).
@@ -314,7 +202,7 @@ export function montarLive(corpo, usuario, aoFechar, aoAbrir) {
   const assistindo = el('span');
   const faixaVolume = el('input', { type: 'range', min: 0, max: 100, value: 100, attrs: { 'aria-label': 'Volume da live' } });
   const a = {
-    usuario, propria, video, sobre, assistindo, faixaVolume, aoFechar, aoAbrir,
+    usuario, propria, video, sobre, assistindo, faixaVolume,
     pararOuvir: [], encerrada: false, pc: null, sessao: null,
   };
   a.botaoSom = botaoIcone('som', 'Silenciar', () => {
@@ -329,25 +217,28 @@ export function montarLive(corpo, usuario, aoFechar, aoAbrir) {
     atualizarSom(a);
   });
   const botaoTela = botaoIcone('telaCheia', 'Tela cheia', () => telaCheia(a));
-  a.botaoFlutuar = botaoIcone('abrirJanela', 'Janela flutuante', () => a.flutuante ? a.aoAbrir() : flutuar(a));
   const barra = el('div', { class: 'barra' },
     propria ? el('span', { class: 'rotulo', text: 'Sua live, sem som aqui para não dar retorno' }) : [a.botaoSom, faixaVolume],
     el('span', { class: 'assistindo', attrs: { title: 'Assistindo agora' } }, icone('olho'), assistindo),
-    a.botaoFlutuar, botaoTela);
+    botaoTela);
   a.palco = el('div', { class: 'live' }, video, sobre, barra);
   video.addEventListener('playing', () => dizer(a, ''));
   video.addEventListener('dblclick', () => telaCheia(a));
-  video.addEventListener('loadedmetadata', () => ajustarFlutuante(a));
-  video.addEventListener('resize', () => ajustarFlutuante(a));
-  limpar(corpo, a.palco);
+  flutuantes.set(usuario, a);
+  a.janela = criarJanelaLive({
+    titulo: `Live de ${estado.membros.get(usuario)?.nome || 'Alguém'}`,
+    conteudo: a.palco, aoFechar: () => fecharInstancia(a),
+  });
   dizer(a, 'Conectando à live...');
-  atual = a;
 
-  navigator.wakeLock?.request('screen').then((trava) => { a.wakeLock = trava; }).catch(() => {});
+  navigator.wakeLock?.request('screen').then((trava) => {
+    if (a.encerrada) trava.release().catch(() => {});
+    else a.wakeLock = trava;
+  }).catch(() => {});
   a.pararOuvir.push(ouvir('lives', () => {
     if (!estado.lives.has(usuario)) terminou(a);
   }));
-  const tela = () => limpar(botaoTela, icone(document.fullscreenElement ? 'sairTelaCheia' : 'telaCheia'));
+  const tela = () => limpar(botaoTela, icone(document.fullscreenElement === a.palco ? 'sairTelaCheia' : 'telaCheia'));
   document.addEventListener('fullscreenchange', tela);
   a.pararOuvir.push(() => document.removeEventListener('fullscreenchange', tela));
   const visivel = () => {

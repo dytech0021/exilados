@@ -15,6 +15,7 @@ export const estado = {
   lidas: new Map(), // sala ou conversa -> até que mensagem eu li (exilados_lidas)
   digitando: new Map(), // sala ou conversa -> Map(user_id -> até quando mostrar "digitando")
   vozServidor: null, // { quando, salas: { salaId: [user_id] } } pelo LiveKit, ou null se não se sabe
+  vozLocal: null, // { sala, ids: [user_id] }: participantes da conexão LiveKit atual, atualizados a cada entrada/saída
   recursos: { gifs: false }, // o que o servidor oferece
   vista: { tipo: 'grupo', id: null }, // tipo: grupo (sala de texto) | amigos | conversa | live
   modo: 'grupo', // o que a coluna da esquerda mostra: grupo | dm

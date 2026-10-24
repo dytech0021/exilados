@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { contarAssistindo, LimitadorFala, liveNoAr, resumirPresenca } from '../js/presenca.js';
+import { contarAssistindo, idsNaSala, LimitadorFala, liveNoAr, resumirPresenca } from '../js/presenca.js';
 
 test('online se alguma aba está online; sala de voz da aba que entrou por último', () => {
   const resumo = resumirPresenca({
@@ -9,11 +9,60 @@ test('online se alguma aba está online; sala de voz da aba que entrou por últi
     c: [{ status: 'online', voz: 's1', desde: 5 }, { status: 'online', voz: 's2', desde: 9, surdo: true, assistindo: 'a' }],
     d: [],
   });
-  assert.deepEqual(resumo.get('a'), { status: 'online', voz: 's1', mudo: true, surdo: false, tela: true, assistindo: null });
-  assert.deepEqual(resumo.get('b'), { status: 'ausente', voz: null, mudo: false, surdo: false, tela: false, assistindo: null });
+  assert.deepEqual(resumo.get('a'), { status: 'online', voz: 's1', desde: 10, mudo: true, surdo: false, tela: true, assistindo: null });
+  assert.deepEqual(resumo.get('b'), { status: 'ausente', voz: null, desde: 0, mudo: false, surdo: false, tela: false, assistindo: null });
   assert.equal(resumo.has('d'), false);
   assert.equal(contarAssistindo(resumo, 'a'), 1);
   assert.equal(contarAssistindo(resumo, 'c'), 0);
+});
+
+test('sair nesta aba atualiza já, sem apagar a sala de outra aba nem aceitar seu próprio eco antigo', () => {
+  const remoto = { a: [
+    { aba: 'aqui', voz: 's1', desde: 20 },
+    { aba: 'outra', voz: 's2', desde: 10 },
+  ] };
+  const local = { id: 'a', meta: { aba: 'aqui', voz: null, desde: 0 } };
+  assert.equal(resumirPresenca(remoto, local).get('a').voz, 's2');
+  assert.equal(resumirPresenca({ a: remoto.a.slice(0, 1) }, local).get('a').voz, null);
+  assert.equal(remoto.a.length, 2);
+});
+
+test('cache do servidor não recoloca quem saiu ou mudou de sala; mostra quem não tem presença', () => {
+  const presenca = new Map([['saiu', { voz: null }], ['mudou', { voz: 's2' }]]);
+  const servidor = { quando: 99000, salas: { s1: ['saiu', 'mudou', 'sem-presenca'] } };
+  assert.deepEqual(idsNaSala('s1', { presenca, servidor, agora: 100000 }), ['sem-presenca']);
+});
+
+test('a sala conectada do LiveKit tira quem saiu na hora, mesmo com presença e cache antigos', () => {
+  const presenca = new Map([['saiu', { voz: 's1', desde: 99000 }]]);
+  const servidor = { quando: 99000, salas: { s1: ['saiu'] } };
+  const local = { sala: 's1', ids: ['eu', 'sem-presenca'] };
+  assert.deepEqual(idsNaSala('s1', { presenca, servidor, local, agora: 100000 }), ['eu', 'sem-presenca']);
+});
+
+test('entrada tem 30 s de tolerância e cache vencido não esconde a presença', () => {
+  const presenca = resumirPresenca({ novo: [{ voz: 's1', desde: 99000 }], antigo: [{ voz: 's1', desde: 100 }] });
+  const servidor = { quando: 99000, salas: {} };
+  assert.deepEqual(idsNaSala('s1', { presenca, servidor, agora: 100000 }), ['novo']);
+  assert.deepEqual(idsNaSala('s1', { presenca, servidor, agora: 140000 }), ['novo', 'antigo']);
+});
+
+test('uma consulta iniciada antes da saída não ressuscita quem fechou todas as abas', () => {
+  const presenca = new Map();
+  const mudancas = new Map([['saiu', 99000]]);
+  const servidor = { inicio: 98000, quando: 100000, salas: { s1: ['saiu'] } };
+  assert.deepEqual(idsNaSala('s1', { presenca, servidor, mudancas, agora: 100000 }), []);
+  assert.deepEqual(idsNaSala('s1', { presenca, servidor: { ...servidor, inicio: 99500 }, mudancas, agora: 100000 }), ['saiu']);
+});
+
+test('uma saída vista pelo LiveKit continua valendo depois que eu saio da sala; uma nova entrada aparece', () => {
+  const presenca = new Map([['saiu', { voz: 's1', desde: 100 }]]);
+  const saidas = new Map([['saiu', { quando: 99000, desde: 100 }]]);
+  const servidor = { inicio: 98000, quando: 100000, salas: { s1: ['saiu'] } };
+  assert.deepEqual(idsNaSala('s1', { presenca, servidor, saidas, agora: 100000 }), []);
+  assert.deepEqual(idsNaSala('s1', { presenca, saidas, agora: 100000 }), []);
+  presenca.set('saiu', { voz: 's1', desde: 99900 });
+  assert.deepEqual(idsNaSala('s1', { presenca, servidor, saidas, agora: 100000 }), ['saiu']);
 });
 
 test('quem assiste a várias telas conta para cada uma', () => {

@@ -3,25 +3,20 @@ export const MARGEM = 8;
 
 const limitar = (valor, minimo, maximo) => Math.min(Math.max(valor, minimo), maximo);
 
-/** Redimensiona por um canto, mantendo a razão real da imagem e o canto oposto fixo. */
-export function redimensionar(origem, canto, dx, dy, proporcao, tela) {
-  const oeste = canto.includes('w');
-  const norte = canto.includes('n');
-  const deltaHorizontal = dx * (oeste ? -1 : 1);
-  const deltaVertical = dy * (norte ? -1 : 1) * proporcao;
-  const delta = Math.abs(deltaHorizontal) >= Math.abs(deltaVertical) ? deltaHorizontal : deltaVertical;
-  const limiteDireita = oeste ? origem.x + origem.largura - MARGEM : tela.largura - MARGEM - origem.x;
-  const limiteBaixo = norte
-    ? origem.y + origem.alturaVideo - MARGEM
-    : tela.altura - MARGEM - origem.y - ALTURA_TITULO;
-  const maximo = Math.max(1, Math.min(limiteDireita, limiteBaixo * proporcao));
-  const largura = limitar(origem.largura + delta, Math.min(240, maximo), maximo);
-  const alturaVideo = largura / proporcao;
+/** Cada borda controla seu eixo; a imagem se ajusta dentro da janela sem deformar. */
+export function redimensionar(origem, borda, dx, dy, tela) {
+  const oeste = borda.includes('w');
+  const norte = borda.includes('n');
+  const horizontal = oeste || borda.includes('e');
+  const vertical = norte || borda.includes('s');
+  const maxLargura = Math.max(1, oeste ? origem.x + origem.largura - MARGEM : tela.largura - MARGEM - origem.x);
+  const maxAltura = Math.max(1, norte ? origem.y + origem.alturaVideo - MARGEM : tela.altura - MARGEM - origem.y - ALTURA_TITULO);
+  const largura = horizontal ? limitar(origem.largura + dx * (oeste ? -1 : 1), Math.min(240, maxLargura), maxLargura) : origem.largura;
+  const alturaVideo = vertical ? limitar(origem.alturaVideo + dy * (norte ? -1 : 1), Math.min(120, maxAltura), maxAltura) : origem.alturaVideo;
   return {
     x: oeste ? origem.x + origem.largura - largura : origem.x,
     y: norte ? origem.y + origem.alturaVideo - alturaVideo : origem.y,
-    largura,
-    alturaVideo,
+    largura, alturaVideo,
   };
 }
 

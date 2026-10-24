@@ -1,14 +1,15 @@
-// Assistir às telas que as pessoas compartilham numa sala de voz (como no Discord): uma ou várias lado a lado. O vídeo
+// Assistir às telas que as pessoas compartilham numa sala de voz, cada uma na sua janela. O vídeo
 // e o som vêm pelo LiveKit só para quem abriu a transmissão; quem não está na sala entra nela para assistir. Quem
 // compartilha vê a própria tela. Com várias abertas, cada uma vem em 720p e a que estiver em tela cheia, na máxima
 // (voz.js), para não pesar na internet de quem transmite nem na de quem assiste.
 import { nomeDaSala } from './dados.js';
+import { criarJanelaLive } from './janela-live.js';
 import { estado, meuId, nomeDe, ouvir } from './estado.js';
 import { contarAssistindo } from './presenca.js';
 import { botaoIcone, el, erro, icone, limpar } from './ui.js';
 import * as voz from './voz.js';
 
-// A vista aberta: { corpo, aoFechar, aoMudar, raiz, grade, sugestoes, quadros: Map(id → quadro), pararOuvir, ... }.
+// As janelas abertas compartilham os ouvintes de voz e a trava da tela.
 let vista = null;
 
 /** As telas abertas na vista agora (na ordem em que foram abertas). */
@@ -19,9 +20,12 @@ export function fecharTela() {
   const v = vista;
   vista = null;
   v.pararOuvir.forEach((f) => f());
-  for (const q of v.quadros.values()) soltarVideo(q);
+  for (const q of v.quadros.values()) {
+    soltarVideo(q);
+    q.janela.destruir();
+    if (document.fullscreenElement === q.elemento) document.exitFullscreen().catch(() => {});
+  }
   v.wakeLock?.release?.().catch(() => {});
-  if (document.fullscreenElement && v.raiz.contains(document.fullscreenElement)) document.exitFullscreen().catch(() => {});
   voz.pararDeAssistir();
 }
 
@@ -53,15 +57,16 @@ async function entrarEAssistir(q) {
   atualizar(q);
 }
 
-/** Tira um quadro; sem nenhum, volta para a tela anterior. */
+/** Fecha só esta transmissão e libera sua assinatura de vídeo. */
 function fecharQuadro(id) {
   const q = vista?.quadros.get(id);
   if (!q) return;
   soltarVideo(q);
-  q.elemento.remove();
+  q.janela.destruir();
+  if (document.fullscreenElement === q.elemento) document.exitFullscreen().catch(() => {});
   vista.quadros.delete(id);
   if (id !== meuId()) voz.pararDeAssistir(id);
-  if (!vista.quadros.size) return vista.aoFechar();
+  if (!vista.quadros.size) return fecharTela();
   arrumar();
 }
 
@@ -73,6 +78,8 @@ function telaCheia(q) {
 
 function atualizarSomDoQuadro(q, temSom) {
   q.botaoSom.hidden = !temSom || q.id === meuId();
+  q.faixaVolume.hidden = q.botaoSom.hidden;
+  q.faixaVolume.value = voz.volumeDaTela();
   const mudo = voz.telaSilenciada(q.id);
   limpar(q.botaoSom, icone(mudo ? 'semSom' : 'som'));
   q.botaoSom.title = mudo ? 'Ativar o som desta tela' : 'Silenciar esta tela';
@@ -86,6 +93,7 @@ function atualizar(q) {
   const propria = q.id === meuId();
   const fechar = el('button', { class: 'botao cinza', text: 'Fechar', onclick: () => fecharQuadro(q.id) });
   q.nome.textContent = propria ? 'Sua tela' : nomeDe(q.id);
+  q.janela?.definirTitulo(propria ? 'Sua tela' : `Tela de ${nomeDe(q.id)}`);
   q.contagem.textContent = String(contarAssistindo(estado.presenca, q.id));
   q.botaoParar.hidden = !(propria && v.tela);
   q.rotulo.textContent = propria && v.tela
@@ -170,12 +178,20 @@ function criarQuadro(id) {
     voz.silenciarTela(id, !voz.telaSilenciada(id));
     atualizarSomDoQuadro(q, true);
   });
+  q.faixaVolume = el('input', {
+    type: 'range', min: 0, max: voz.VOLUME_MAXIMO, value: voz.volumeDaTela(),
+    attrs: { 'aria-label': 'Volume de todas as telas', title: 'Volume de todas as telas' },
+    oninput: () => {
+      voz.definirVolumeDaTela(Number(q.faixaVolume.value));
+      for (const quadro of vista?.quadros.values() || []) quadro.faixaVolume.value = voz.volumeDaTela();
+    },
+  });
   q.botaoParar = el('button', { class: 'botao vermelho pequeno', text: 'Parar de compartilhar', onclick: () => voz.pararTela().catch(erro) });
   q.botaoTela = botaoIcone('telaCheia', 'Tela cheia', () => telaCheia(q));
   const barra = el('div', { class: 'barra' },
-    q.nome, q.rotulo, q.semSom, q.botaoSom,
+    q.nome, q.rotulo, q.semSom, q.botaoSom, q.faixaVolume,
     el('span', { class: 'assistindo', attrs: { title: 'Assistindo agora' } }, icone('olho'), q.contagem),
-    q.botaoParar, q.botaoTela, botaoIcone('fechar', 'Fechar esta tela', () => fecharQuadro(id)));
+    q.botaoParar, q.botaoTela);
   q.elemento = el('div', { class: 'live quadro-tela' }, video, q.sobre, barra);
   video.addEventListener('playing', () => {
     if (vista?.quadros.get(id) !== q || !q.faixa) return;
@@ -189,35 +205,23 @@ function criarQuadro(id) {
   return q;
 }
 
-/** Reorganiza a grade, os atalhos para as outras telas da sala e o título lá em cima. */
 function arrumar() {
   if (!vista) return;
-  vista.grade.dataset.n = String(Math.min(vista.quadros.size, 6));
-  const v = voz.voz;
-  const outras = [];
-  if (v.sala) {
-    for (const [id, p] of estado.presenca) {
-      if (id !== meuId() && p.tela && p.voz === v.sala && !vista.quadros.has(id)) outras.push(id);
-    }
-    if (v.tela && !vista.quadros.has(meuId())) outras.push(meuId());
-  }
-  limpar(vista.sugestoes, outras.length ? el('span', { class: 'rotulo', text: 'Também ao vivo:' }) : null,
-    ...outras.map((id) => el('button', {
-      class: 'botao pequeno cinza', text: `+ ${id === meuId() ? 'Sua tela' : nomeDe(id)}`,
-      title: 'Assistir junto, lado a lado', onclick: () => adicionar(id),
-    })));
-  const volume = voz.volumeDaTela();
-  limpar(vista.botaoSomGeral, icone(volume === 0 ? 'semSom' : 'som'));
-  vista.faixaVolume.value = volume;
   for (const q of vista.quadros.values()) atualizar(q);
-  vista.aoMudar?.(telasAbertas());
 }
 
 function adicionar(id) {
-  if (!vista || vista.quadros.has(id)) return;
+  if (!vista) return;
+  if (vista.quadros.has(id)) {
+    vista.quadros.get(id).janela.focar();
+    return;
+  }
   const q = criarQuadro(id);
   vista.quadros.set(id, q);
-  vista.grade.append(q.elemento);
+  q.janela = criarJanelaLive({
+    titulo: id === meuId() ? 'Sua tela' : `Tela de ${nomeDe(id)}`,
+    conteudo: q.elemento, aoFechar: () => fecharQuadro(id),
+  });
   dizer(q, 'Conectando...');
   // Tela de quem está em outra sala (ou sem estar em nenhuma): entra na sala dela, como no Discord.
   const salaDela = estado.presenca.get(id)?.voz;
@@ -227,42 +231,18 @@ function adicionar(id) {
   arrumar();
 }
 
-/**
- * Mostra em `corpo` a tela que `id` compartilha (ou a própria). Com a vista já aberta, a tela entra ao lado das
- * outras. `aoFechar` volta para a tela anterior; `aoMudar(ids)` avisa quais telas estão abertas (para o título).
- */
-export function montarTela(corpo, id, aoFechar, aoMudar) {
-  if (vista && vista.corpo === corpo && corpo.contains(vista.raiz)) {
-    vista.aoFechar = aoFechar;
-    vista.aoMudar = aoMudar;
-    if (vista.quadros.has(id)) arrumar();
-    else adicionar(id);
+/** Abre uma tela flutuante sem substituir a conversa que está aberta. */
+export function montarTela(_corpo, id) {
+  if (vista) {
+    adicionar(id);
     return;
   }
-  fecharTela();
-  const faixaVolume = el('input', {
-    type: 'range', min: 0, max: voz.VOLUME_MAXIMO, value: voz.volumeDaTela(), attrs: { 'aria-label': 'Volume das transmissões' },
-  });
-  const v = {
-    corpo, aoFechar, aoMudar, quadros: new Map(), pararOuvir: [], volumeAntes: 100, faixaVolume,
-    grade: el('div', { class: 'telas-grade' }), sugestoes: el('span', { class: 'sugestoes-tela' }),
-  };
-  v.botaoSomGeral = botaoIcone('som', 'Som das transmissões', () => {
-    const volume = voz.volumeDaTela();
-    if (volume > 0) v.volumeAntes = volume;
-    voz.definirVolumeDaTela(volume > 0 ? 0 : v.volumeAntes || 100);
-    arrumar();
-  });
-  faixaVolume.addEventListener('input', () => {
-    voz.definirVolumeDaTela(Number(faixaVolume.value));
-    limpar(v.botaoSomGeral, icone(Number(faixaVolume.value) === 0 ? 'semSom' : 'som'));
-  });
-  v.raiz = el('div', { class: 'telas' }, v.grade,
-    el('div', { class: 'telas-rodape' }, el('span', { class: 'controles-som' }, v.botaoSomGeral, faixaVolume), v.sugestoes));
-  limpar(corpo, v.raiz);
+  const v = { quadros: new Map(), pararOuvir: [] };
   vista = v;
-
-  navigator.wakeLock?.request('screen').then((trava) => { v.wakeLock = trava; }).catch(() => {});
+  navigator.wakeLock?.request('screen').then((trava) => {
+    if (vista !== v) trava.release().catch(() => {});
+    else v.wakeLock = trava;
+  }).catch(() => {});
   for (const evento of ['telas', 'voz', 'presenca']) v.pararOuvir.push(ouvir(evento, () => arrumar()));
   // A tela em tela cheia vem na qualidade máxima; as outras continuam em 720p.
   const cheia = () => {

@@ -11,6 +11,7 @@ Type=simple
 ExecStart=/opt/node-v24.19.0-linux-x64/bin/node --max-old-space-size=48 /opt/exilados/api/src/servidor.mjs
 EnvironmentFile=/etc/exilados/api.env
 DynamicUser=yes
+StateDirectory=exilados
 Restart=always
 RestartSec=3
 
