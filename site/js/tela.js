@@ -79,9 +79,14 @@ function telaCheia(q) {
 }
 
 function atualizarSomDoQuadro(q, temSom) {
-  q.botaoSom.hidden = !temSom || q.id === meuId();
+  // O volume fica sempre à mão na janela de quem assiste (menos na própria tela, que não toca aqui): antes de o som
+  // chegar, e mesmo numa transmissão sem áudio, a pessoa já deixa o volume do jeito que quer. Quando a transmissão
+  // não tem áudio, o aviso "Transmissão sem áudio" ao lado explica por que não sai som.
+  q.botaoSom.hidden = q.id === meuId();
   q.faixaVolume.hidden = q.botaoSom.hidden;
   q.faixaVolume.value = voz.volumeDaTela();
+  q.botaoSom.disabled = false;
+  q.faixaVolume.title = temSom ? 'Volume das transmissões' : 'Volume das transmissões (esta está sem áudio)';
   const mudo = voz.telaSilenciada(q.id);
   limpar(q.botaoSom, icone(mudo ? 'semSom' : 'som'));
   q.botaoSom.title = mudo ? 'Ativar o som desta tela' : 'Silenciar esta tela';

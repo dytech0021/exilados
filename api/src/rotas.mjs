@@ -114,7 +114,7 @@ export function criarRotas({
 
   async function membroDoAnuncio(token, id, corpo) {
     limiteNarracao(id);
-    if (!UUID.test(corpo.usuario) || !['entrou', 'saiu'].includes(corpo.evento)) throw new Recusa(400, 'Anúncio inválido.');
+    if (!UUID.test(corpo.usuario) || !['entrou', 'saiu', 'live'].includes(corpo.evento)) throw new Recusa(400, 'Anúncio inválido.');
     const membro = await supabase.membro(token, corpo.usuario);
     if (!membro?.ativo) throw new Recusa(404, 'Membro não encontrado.');
     return membro;

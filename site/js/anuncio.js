@@ -3,6 +3,8 @@
 const FRASES = {
   entrou: ['{nome} brotou na sala', '{nome} chegou', 'Olha só, {nome} chegou'],
   saiu: ['{nome} vazou', '{nome} meteu o pé', '{nome} saiu da sala'],
+  // Falado alto porque quem está jogando em tela cheia não vê o aviso na tela.
+  live: ['{nome} abriu uma live', 'Olha a live do {nome} aí', '{nome} entrou ao vivo'],
 };
 
 /** A frase do anúncio (`variante` escolhe entre as opções), ou null para evento desconhecido. */

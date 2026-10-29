@@ -53,3 +53,7 @@ test('não baixa de fora do serviço de voz nem guarda o que não é WAV', async
     assert.equal(await narracao.guardado('Ana', 'entrou'), null);
   });
 });
+
+test('a live tem frase própria na voz neural', () => {
+  assert.equal(new Narracao({ pasta: 'x' }).pedido('Ana', 'live').texto, 'Ana abriu uma live!');
+});

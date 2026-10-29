@@ -233,6 +233,7 @@ function acompanhar() {
   ouvir('amizades', atualizarTrilho);
   ouvir('liveComecou', (live) => {
     if (!liveNoAr(live, agoraServidor())) return;
+    voz.narrarLive(live.user_id);
     aviso(`${nomeDe(live.user_id)} entrou ao vivo`, {
       tipo: 'vivo',
       duracao: 12000,
@@ -242,6 +243,7 @@ function acompanhar() {
   ouvir('telaComecou', (id) => {
     const salaVoz = estado.presenca.get(id)?.voz;
     if (!salaVoz || telasAbertas().includes(id)) return;
+    voz.narrarLive(id);
     aviso(`${nomeDe(id)} está compartilhando a tela na ${nomeDaSala(salaVoz)}`, {
       tipo: 'vivo',
       duracao: 12000,

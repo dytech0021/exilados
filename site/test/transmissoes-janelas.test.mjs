@@ -61,3 +61,14 @@ test('a janela mantém acesso ao volume geral das telas, inclusive quando estava
     assert.equal(Number(controles[1].value), 75);
   } finally { fecharTela(); voz.definirVolumeDaTela(100); }
 });
+
+test('o volume da transmissão fica sempre à mão, mesmo antes de o som da tela chegar', () => {
+  try {
+    montarTela(new Elemento(), 'a');
+    const barra = janelas()[0].children[1].children[2];
+    const volume = barra.children.find((e) => e.tagName === 'input');
+    const silenciar = barra.children.find((e) => e.className?.includes('botao-icone'));
+    assert.equal(volume.hidden, false, 'o controle de volume não pode sumir da janela');
+    assert.equal(silenciar.hidden, false, 'o botão de silenciar não pode sumir da janela');
+  } finally { fecharTela(); }
+});

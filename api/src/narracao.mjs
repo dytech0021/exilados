@@ -14,7 +14,11 @@ const DESCRICAO = 'An adult Brazilian woman with a warm, feminine, slightly husk
   + 'Speak native Brazilian Portuguese with an unmistakable Rio de Janeiro carioca accent, including soft chiado in syllable-final S. '
   + 'Intimate, charming, confident and teasing delivery, with natural expressive inflection. '
   + 'A brisk conversational pace, short pauses, clear names. Do not speak slowly, monotonously or robotically. No music or sound effects.';
-const FRASES = { entrou: (nome) => `${nome} chegou, hein!`, saiu: (nome) => `${nome} meteu o pé!` };
+const FRASES = {
+  entrou: (nome) => `${nome} chegou, hein!`,
+  saiu: (nome) => `${nome} meteu o pé!`,
+  live: (nome) => `${nome} abriu uma live!`,
+};
 
 async function lerLimitado(resposta, limite) {
   if (!resposta.ok) throw Error('Áudio indisponível.');

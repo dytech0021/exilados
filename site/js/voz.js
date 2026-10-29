@@ -1055,6 +1055,20 @@ export async function definirPortaDeVoz(ligada) {
   }
 }
 
+/**
+ * Fala "Fulano abriu uma live" quando alguém entra ao vivo ou começa a compartilhar a tela. Quem está jogando em tela
+ * cheia não vê o aviso na tela, mas ouve. Vale a mesma opção da narração de entradas e saídas.
+ */
+export function narrarLive(id) {
+  if (id === meuId()) return;
+  const p = preferencias();
+  narrador.anunciar(id, nomeDe(id), 'live', {
+    ligado: p.anunciarEntradas,
+    surdo: voz.surdo,
+    permitido: () => preferencias().anunciarEntradas && !voz.surdo,
+  }).catch(() => {});
+}
+
 /** Ler em voz alta o nome de quem entra e de quem sai da sala. */
 export function definirAnunciarEntradas(ligado) {
   preferencias().anunciarEntradas = Boolean(ligado);

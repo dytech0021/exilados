@@ -112,3 +112,11 @@ test('demo sem cota ou com resposta estranha: falha (e a narração usa a voz do
     }));
   }
 });
+
+test('quem abre uma live ou compartilha a tela também é anunciado', () => {
+  assert.equal(textoDoAnuncio('Lucas', 'live', 0), 'Lucas abriu uma live');
+  assert.equal(textoDoAnuncio('Lucas', 'live', 1), 'Olha a live do Lucas aí');
+  const { falas, ambiente } = falante();
+  assert.equal(anunciar('Bia', 'live', { ligado: true, surdo: false, ...ambiente }), true);
+  assert.deepEqual(falas.map((f) => f.text), ['Bia abriu uma live']);
+});
