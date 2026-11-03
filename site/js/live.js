@@ -6,6 +6,7 @@ import { criarJanelaLive } from './janela-live.js';
 import { vigiarVideo } from './estabilidade.js';
 import { api } from './supa.js';
 import { botaoIcone, el, icone, limpar } from './ui.js';
+import { assistirWebcamLive, fecharWebcamLive, registrarPalcoWebcam } from './webcam.js';
 
 const flutuantes = new Map();
 
@@ -29,6 +30,8 @@ export function fecharTodasLives() {
 export const haLivesAbertas = () => flutuantes.size > 0;
 
 function fecharInstancia(a) {
+  a.soltarPalcoWebcam?.();
+  fecharWebcamLive(a.usuario);
   flutuantes.delete(a.usuario);
   a.janela?.destruir();
   a.encerrada = true;
@@ -70,6 +73,7 @@ function retentar(a, texto, ms = 3000) {
 }
 
 function terminou(a) {
+  fecharWebcamLive(a.usuario);
   if (a.encerrada) return;
   a.encerrada = true;
   fecharSessao(a);
@@ -219,6 +223,9 @@ export function montarLive(_corpo, usuario) {
   });
   const botaoTela = botaoIcone('telaCheia', 'Tela cheia', () => telaCheia(a));
   const barra = el('div', { class: 'barra' },
+    el('button', { class: 'botao pequeno', text: 'Webcam', onclick: () => {
+      assistirWebcamLive(usuario).catch((falha) => dizer(a, falha.message));
+    } }),
     propria ? el('span', { class: 'rotulo', text: 'Sua live, sem som aqui para não dar retorno' }) : [a.botaoSom, faixaVolume],
     el('span', { class: 'assistindo', attrs: { title: 'Assistindo agora' } }, icone('olho'), assistindo),
     botaoTela);
@@ -230,6 +237,7 @@ export function montarLive(_corpo, usuario) {
     titulo: `Live de ${estado.membros.get(usuario)?.nome || 'Alguém'}`,
     conteudo: a.palco, aoFechar: () => fecharInstancia(a),
   });
+  a.soltarPalcoWebcam = registrarPalcoWebcam(`live:${usuario}`, `Live de ${estado.membros.get(usuario)?.nome || 'Alguém'}`, a.palco);
   dizer(a, 'Conectando à live...');
 
   navigator.wakeLock?.request('screen').then((trava) => {

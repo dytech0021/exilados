@@ -92,6 +92,24 @@ on conflict (user_id) do update set papel = 'dono', ativo = true;
 
 ## 3. Conferir
 
+### Webcam do celular
+
+Configurações → Webcam do celular, também acessível no painel da sala de voz. Celular e PC entram na mesma conta.
+O celular envia só vídeo para uma sala privada do LiveKit; o PC recebe a prévia e escolhe publicar na chamada,
+na live do programa ou nas duas. As identidades da webcam são distintas da identidade do áudio da chamada.
+Quem assiste escolhe janela separada ou sobreposição numa transmissão aberta, arrasta e redimensiona pelo canto.
+A sobreposição é apresentada no Exilados de quem assiste, sem ser incorporada ao vídeo original do jogo.
+
+O Android original requer atualização assinada com a chave original para conceder acesso à câmera.
+`android/gerar-webcam.ps1` gera um companheiro independente, `com.dytech.exilados.webcam`, com chave própria
+protegida pelo Windows em `%LOCALAPPDATA%/Exilados-Webcam-publicar`. Saída: `pronto/webcam/Exilados.apk` e
+`android.json`; a publicação prevista é `/exilados/atualizacao/webcam/`. O companheiro abre `?webcam=1`.
+O navegador do celular também pode ser usado. Mantenha o app/navegador aberto e a tela acesa durante o envio.
+
+Validação: testes de permissões da API e geometria da sobreposição; compilação e testes do Android.
+O fluxo completo entre um celular físico e outro PC ainda precisa ser validado. Esta alteração no GitHub
+não publica automaticamente o site, a API ou o APK.
+
 | O quê | Como |
 |---|---|
 | exilados-api | `curl https://filabox3d.com.br/exilados/api/saude` → `{"ok":true,...}` |
@@ -130,7 +148,7 @@ Registros do programa: `%APPDATA%\Exilados\sessoes.txt` (início, fim e quedas d
 | Som da tela compartilhada pelo site | No Windows o Chrome/Edge manda o som do sistema todo (outros programas também); o site pede para deixar de fora o som da própria sala, o que os navegadores atuais respeitam. Se alguém ouvir o próprio eco, desmarque o som ao compartilhar. Para mandar só o som do jogo, use o programa do Windows. |
 | Rede que bloqueia UDP | A voz usa o TCP 7881 e as lives o TCP 8189 sozinhas. Sem TURN nesta versão. |
 | Várias telas compartilhadas ao mesmo tempo travando (23/10: 3 telas, duas saindo da mesma casa) | Cada tela vai em 3 camadas (360p, 720p e a original). Sem dynacast, as 3 saíam sempre, até ~8 Mbit/s por tela em 1080p, e lotavam o upload de quem divide a internet. Desde o site 45, com dynacast, só sai a camada que alguém está vendo. Várias telas abertas lado a lado vêm em 720p cada; em tela cheia, na máxima. Para ver quem transmite de onde: `ListParticipants` (camadas) e os candidatos `srflx`/`related` no log do LiveKit (rede de casa). |
-| Narração de quem entra e sai | Usa o demo oficial gratuito do [Qwen3-TTS VoiceDesign](https://huggingface.co/spaces/Qwen/Qwen3-TTS), com descrição de uma mulher adulta, voz sensual, ritmo ágil e sotaque carioca (a fidelidade do sotaque depende do modelo). A API só envia o nome de um membro ativo e frases fixas. Os WAVs ficam em `/var/lib/exilados/exilados-narracao/` pelo `StateDirectory` do serviço, até 256 áudios de até 1 MB; não precisam de chave e sobrevivem às publicações. O demo tem fila e cota: uma geração por vez, prazo de 25 s e pausa de 5 min após falha. Ao entrar na sala, prepara os anúncios dos membros em segundo plano. Sem áudio pronto em 1,8 s, fala pelo aparelho em velocidade 1,16; não narra depois de sair, desligar a opção ou desligar o som. |
+| Narração de entrada, saída e live | Francisca Neural (pt-BR), com ritmo 12% mais rápido, gerada no servidor pelo edge-tts 7.3.1 em `/opt/exilados-voz`. Python venv e FFmpeg são preparados pelo instalador. WAVs persistem em `/var/lib/exilados/exilados-narracao/`, até 256 áudios de 1 MB. Uma geração por vez, pedidos iguais agrupados; falha pausa novas gerações por 1 minuto. Prepara os três avisos ao entrar na sala. Reprodução na velocidade original para preservar entonação; alternativa local a 1,24 se não fica pronto em 1,8 s. |
 | Som do jogo saindo na voz de quem joga (fone vazando para o microfone do headset) | "Tirar do microfone o som do computador" (ligado por padrão no computador, em Voz e áudio): o microfone pede `echoCancellation: 'all'` e o Chromium usa tudo o que sai do computador como referência do cancelamento de eco, a mesma técnica do Discord (que soma o Krisp por cima). Para conferir no programa: abrir com `WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS=--enable-logging --v=1` e procurar `loopback aec: yes` no `chrome_debug.log` da pasta do WebView2. A porta de voz (desligada por padrão, reprovada no teste) continua como opção. No Windows, sem microfone escolhido, o site usa o microfone de comunicação do Windows. |
 | Voz robótica/abafada | O cancelamento de ruído (RNNoise) estragava a voz e vem desligado desde 20/10; no Android a voz sai direto do microfone (sem o tratamento do computador). Se voltar, conferir em Configurações → Voz e áudio se alguém ligou o cancelamento. |
 | Conexão de voz que cai e volta a cada poucos segundos ("resuming RTC session", `RR_SIGNAL_DISCONNECTED`) | Corrigido em 20/10: um erro no tratador de "quem está falando" (setTimeout chamado como método, "Illegal invocation" no navegador) subia para o laço de leitura do LiveKit, que fecha a conexão ("error in reading loop"). Tudo que roda nos eventos do LiveKit precisa ficar em try/catch. Para investigar de novo: `journalctl -u exilados-livekit \| grep resuming` conta as quedas; `tcpdump -i lo port 7880` mostra a conversa nginx↔LiveKit sem TLS (com permessage-deflate) e quem fecha. |

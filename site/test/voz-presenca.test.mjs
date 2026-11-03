@@ -89,10 +89,11 @@ test('o narrador prepara até 12 membros em sequência e cancela áudio ao desat
   const room = obterSala();
   await esvaziarPromessas();
   try {
-    assert.equal(pedidos.length, 24);
-    // A ordem é sorteada (cada aparelho gera nomes diferentes); cada membro vem com a entrada e a saída juntas.
-    assert.deepEqual(pedidos.slice(0, 2).map((p) => p.evento), ['entrou', 'saiu']);
+    assert.equal(pedidos.length, 36);
+    // Cada membro tem os três avisos prontos antes do evento, inclusive a abertura de live.
+    assert.deepEqual(pedidos.slice(0, 3).map((p) => p.evento), ['entrou', 'saiu', 'live']);
     assert.equal(pedidos[0].usuario, pedidos[1].usuario);
+    assert.equal(pedidos[0].usuario, pedidos[2].usuario);
     assert.equal(new Set(pedidos.map((p) => p.usuario)).size, 12);
     assert.equal(tocados.length, 0);
     room.eventos.get('ParticipantConnected')({ identity: 'm0' });

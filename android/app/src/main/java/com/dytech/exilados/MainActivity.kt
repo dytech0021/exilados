@@ -73,7 +73,7 @@ class MainActivity : Activity() {
     }
 
     private fun enderecoInicial(intent: Intent?) =
-        intent?.dataString?.takeIf { Enderecos.doSite(it) } ?: Enderecos.SITE
+        intent?.dataString?.takeIf { Enderecos.doSite(it) } ?: (Enderecos.SITE + if (BuildConfig.WEBCAM_COMPANION) "?webcam=1" else "")
 
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
@@ -169,10 +169,20 @@ class MainActivity : Activity() {
 
     private fun temMicrofone() = checkSelfPermission(Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED
 
+    private fun recursosLiberados(pedido: PermissionRequest): Array<String> = pedido.resources.filter {
+        when (it) {
+            PermissionRequest.RESOURCE_AUDIO_CAPTURE -> temMicrofone()
+            PermissionRequest.RESOURCE_VIDEO_CAPTURE -> checkSelfPermission(Manifest.permission.CAMERA) == PackageManager.PERMISSION_GRANTED
+            else -> false
+        }
+    }.toTypedArray()
+
     private fun pedirMicrofone(pedido: PermissionRequest) {
         pedidoDoMicrofone?.deny()
         pedidoDoMicrofone = pedido
-        val pedir = mutableListOf(Manifest.permission.RECORD_AUDIO)
+        val pedir = mutableListOf<String>()
+        if (PermissionRequest.RESOURCE_AUDIO_CAPTURE in pedido.resources) pedir += Manifest.permission.RECORD_AUDIO
+        if (PermissionRequest.RESOURCE_VIDEO_CAPTURE in pedido.resources) pedir += Manifest.permission.CAMERA
         // O fone Bluetooth aparece na lista de aparelhos da voz; a notificação "Na sala de voz" precisa de licença.
         if (Build.VERSION.SDK_INT >= 31) pedir += Manifest.permission.BLUETOOTH_CONNECT
         if (Build.VERSION.SDK_INT >= 33) pedir += Manifest.permission.POST_NOTIFICATIONS
@@ -185,11 +195,12 @@ class MainActivity : Activity() {
         if (codigo != PEDIDO_MICROFONE) return
         val pedido = pedidoDoMicrofone ?: return
         pedidoDoMicrofone = null
-        if (temMicrofone()) {
-            pedido.grant(arrayOf(PermissionRequest.RESOURCE_AUDIO_CAPTURE))
+        val liberados = recursosLiberados(pedido)
+        if (liberados.size == pedido.resources.size) {
+            pedido.grant(liberados)
             // O site avisa "na voz" antes de o microfone ser liberado: o serviço subiu sem ele e, com a tela apagada, o
             // Android mandaria silêncio. Sobe de novo, agora com o microfone.
-            salaDaVoz?.let { VozServico.iniciar(this, it, comMicrofone = true) }
+            if (temMicrofone()) salaDaVoz?.let { VozServico.iniciar(this, it, comMicrofone = true) }
         } else {
             pedido.deny()
         }
@@ -244,15 +255,19 @@ class MainActivity : Activity() {
 
     private inner class Janelas : WebChromeClient() {
         override fun onPermissionRequest(pedido: PermissionRequest) = runOnUiThread {
-            val audio = PermissionRequest.RESOURCE_AUDIO_CAPTURE
             // pedido.origin é só a origem (https://filabox3d.com.br/), sem o caminho do site.
-            if (!Enderecos.origemDoSite(pedido.origin.toString()) || audio !in pedido.resources) {
+            val conhecidos = setOf(PermissionRequest.RESOURCE_AUDIO_CAPTURE, PermissionRequest.RESOURCE_VIDEO_CAPTURE)
+            if (!Enderecos.origemDoSite(pedido.origin.toString()) || pedido.resources.isEmpty() || pedido.resources.any { it !in conhecidos }) {
                 pedido.deny()
-            } else if (temMicrofone()) {
-                pedido.grant(arrayOf(audio))
+            } else if (recursosLiberados(pedido).size == pedido.resources.size) {
+                pedido.grant(recursosLiberados(pedido))
             } else {
                 pedirMicrofone(pedido)
             }
+        }
+
+        override fun onPermissionRequestCanceled(pedido: PermissionRequest) {
+            if (pedidoDoMicrofone === pedido) pedidoDoMicrofone = null
         }
 
         override fun onShowFileChooser(view: WebView, retorno: ValueCallback<Array<Uri>>, parametros: FileChooserParams): Boolean {

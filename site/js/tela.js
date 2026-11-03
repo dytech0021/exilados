@@ -8,6 +8,7 @@ import { estado, meuId, nomeDe, ouvir } from './estado.js';
 import { contarAssistindo } from './presenca.js';
 import { botaoIcone, el, erro, icone, limpar } from './ui.js';
 import * as voz from './voz.js';
+import { registrarPalcoWebcam } from './webcam.js';
 
 // As janelas abertas compartilham os ouvintes de voz e a trava da tela.
 let vista = null;
@@ -21,6 +22,7 @@ export function fecharTela() {
   vista = null;
   v.pararOuvir.forEach((f) => f());
   for (const q of v.quadros.values()) {
+    q.soltarPalcoWebcam?.();
     soltarVideo(q);
     q.janela.destruir();
     if (document.fullscreenElement === q.elemento) document.exitFullscreen().catch(() => {});
@@ -61,6 +63,7 @@ async function entrarEAssistir(q) {
 function fecharQuadro(id) {
   const q = vista?.quadros.get(id);
   if (!q) return;
+  q.soltarPalcoWebcam?.();
   soltarVideo(q);
   q.observador?.disconnect();
   q.janela.destruir();
@@ -250,6 +253,7 @@ function adicionar(id) {
     titulo: id === meuId() ? 'Sua tela' : `Tela de ${nomeDe(id)}`,
     conteudo: q.elemento, aoFechar: () => fecharQuadro(id), aoMudarDeJanela: () => q.remedir?.(),
   });
+  q.soltarPalcoWebcam = registrarPalcoWebcam(`tela:${id}`, `Tela de ${nomeDe(id)}`, q.elemento);
   acompanharTamanho(q);
   dizer(q, 'Conectando...');
   // Tela de quem está em outra sala (ou sem estar em nenhuma): entra na sala dela, como no Discord.

@@ -62,7 +62,7 @@ function retomarVideos(raiz) {
 const viewport = () => ({ largura: window.innerWidth, altura: window.innerHeight });
 const avisar = () => window.dispatchEvent(new Event('janelas-video'));
 
-export function criarJanelaLive({ titulo, conteudo, aoFechar, aoMudarDeJanela = () => {} }) {
+export function criarJanelaLive({ titulo, conteudo, aoFechar, aoMudarDeJanela = () => {}, modoForcado }) {
   const criar = (tag, classe, texto) => {
     const e = document.createElement(tag);
     e.className = classe;
@@ -75,7 +75,7 @@ export function criarJanelaLive({ titulo, conteudo, aoFechar, aoMudarDeJanela = 
   fechar.title = 'Fechar esta transmissão';
   fechar.setAttribute('aria-label', fechar.title);
   fechar.addEventListener('click', aoFechar);
-  const modo = modoDaqui();
+  const modo = modoForcado || modoDaqui();
   const destacarBotao = criar('button', 'botao-icone janela-live-destacar');
   destacarBotao.type = 'button';
   destacarBotao.title = 'Abrir numa janela separada (leve para qualquer lugar ou outro monitor)';

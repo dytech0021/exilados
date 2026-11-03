@@ -98,7 +98,7 @@ export function criarRotas({
   const previas = new Map();
   const limitePrevia = criarLimite(60, 60000, agora);
   const limiteGifs = criarLimite(40, 60000, agora);
-  const limiteNarracao = criarLimite(30, 60000, agora);
+  const limiteNarracao = criarLimite(60, 60000, agora);
   let presentes = { ate: 0, salas: null };
 
   async function quemPede(pedido) {
@@ -121,11 +121,40 @@ export function criarRotas({
   }
 
   const rotas = {
-    // Narração de quem entra/sai: o áudio guardado, ou o que o aparelho deve gerar no demo de voz (narracao.mjs).
+    // Celular e PC compartilham a mesma conta, mas usam identidades distintas numa sala privada.
+    async 'POST /webcam/conectar'({ token, id, membro }, corpo) {
+      const papel = corpo.papel;
+      if (!['celular', 'pc', 'publicar', 'assistir'].includes(papel)) throw new Recusa(400, 'Modo de webcam inválido.');
+      let dono = id;
+      const privada = papel === 'celular' || papel === 'pc';
+      if (privada && corpo.usuario && corpo.usuario !== id) throw new Recusa(403, 'Conecte seus próprios aparelhos com a mesma conta.');
+      if (!privada) {
+        dono = papel === 'assistir' ? String(corpo.usuario || '') : id;
+        if (!UUID.test(dono)) throw new Recusa(400, 'Webcam inválida.');
+        const alvo = await supabase.membro(token, dono);
+        if (!alvo?.ativo) throw new Recusa(404, 'Membro não encontrado.');
+        const live = await supabase.liveDe(token, dono);
+        const sinal = Date.parse(live?.ultimo_sinal);
+        if (!Number.isFinite(sinal) || agora() - sinal > 60000) throw new Recusa(404, 'Esta live não está no ar.');
+      }
+      const publicar = papel === 'celular' || papel === 'publicar';
+      const sala = `${privada ? 'webcam-privada' : 'webcam-live'}-${dono}`;
+      // Cada janela de quem assiste tem sua identidade; nunca usa a identidade da chamada principal.
+      const aparelho = papel === 'assistir' ? String(corpo.aparelho || '') : '';
+      if (papel === 'assistir' && !UUID.test(aparelho)) throw new Recusa(400, 'Aparelho inválido.');
+      return { url: config.urlVoz, sala, token: tokenDoLiveKit({
+        chave: config.livekitChave, segredo: config.livekitSegredo,
+        identidade: `${id}:${papel}${aparelho ? `:${aparelho}` : ''}`, nome: membro.nome, sala,
+        publicar, receber: !publicar, fontes: publicar ? ['camera'] : [], segundos: 120, agora: agora(),
+      }) };
+    },
+
+    // Narração neural de entrada, saída e live, gerada e guardada pelo servidor.
     async 'POST /voz/anuncio'({ token, id }, corpo) {
       const membro = await membroDoAnuncio(token, id, corpo);
-      const audio = narracao ? await narracao.guardado(membro.nome, corpo.evento) : null;
-      return audio || !narracao ? { audio } : { audio: null, gerar: narracao.pedido(membro.nome, corpo.evento) };
+      const audio = narracao ? await (narracao.obter
+        ? narracao.obter(membro.nome, corpo.evento) : narracao.guardado(membro.nome, corpo.evento)) : null;
+      return { audio };
     },
 
     // O aparelho gerou no demo: o servidor baixa de lá (só de lá), confere e guarda para o grupo.

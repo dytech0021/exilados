@@ -15,7 +15,7 @@ StateDirectory=exilados
 Restart=always
 RestartSec=3
 
-MemoryMax=96M
+MemoryMax=192M
 CPUQuota=30%
 LimitNOFILE=4096
 

@@ -259,6 +259,21 @@ button.ao-vivo:hover { background: var(--vermelho-escuro); }
 }
 .avatar.t80 .ponto { width: 24px; height: 24px; border-width: 5px; right: -2px; bottom: -2px; }
 
+.webcam-previa { display: block; width: 100%; max-width: 640px; max-height: 45vh; aspect-ratio: 16/9; background: #111; border-radius: 8px; object-fit: contain; }
+.webcam-previa[hidden] { display: none; }
+.webcam-controles { display: flex; flex-wrap: wrap; gap: 8px; margin: 16px 0; }
+.webcam-destino { position: relative; }
+.webcam-quadro { display: flex; flex-direction: column; width: 100%; height: 100%; background: #17181c; overflow: hidden; }
+.webcam-quadro > video { width: 100%; height: 100%; min-height: 0; flex: 1; object-fit: contain; background: #111; }
+.webcam-barra { display: flex; align-items: center; gap: 6px; padding: 5px; flex: none; font-size: 12px; background: #25262c; color: #fff; }
+.webcam-barra > span { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.webcam-barra select { max-width: 55%; min-width: 60px; font-size: 11px; color: #fff; background: #33343a; }
+.webcam-barra button { background: none; border: 0; color: #fff; cursor: pointer; }
+.webcam-sobreposta { position: absolute; z-index: 15; border: 1px solid #9595aa; border-radius: 6px; box-shadow: 0 4px 20px #0008; }
+.webcam-sobreposta .webcam-barra { cursor: move; touch-action: none; }
+.webcam-redimensionar { display: none; }
+.webcam-sobreposta .webcam-redimensionar { display: block; position: absolute; right: 0; bottom: 0; width: 24px; height: 24px; border: 0; color: #fff; background: linear-gradient(135deg, transparent 50%, #a6a6c7 51%); cursor: nwse-resize; touch-action: none; }
+
 /* painel de voz conectada e do usuário */
 .painel-voz { flex: none; background: var(--painel); padding: 8px; border-bottom: 1px solid #2e2f34; }
 .painel-voz .linha { display: flex; align-items: center; gap: 4px; }

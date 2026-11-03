@@ -61,6 +61,14 @@ if [ ! -x "/opt/livekit/$LIVEKIT_VERSAO/livekit-server" ]; then
   rm -rf "$TMP"
 fi
 
+passo "Voz neural brasileira"
+if [ ! -x /usr/bin/ffmpeg ] || [ ! -x /opt/exilados-voz/bin/edge-tts ] || ! /opt/exilados-voz/bin/pip show edge-tts | grep '^Version: 7.3.1$' >/dev/null; then
+  apt-get update -qq
+  DEBIAN_FRONTEND=noninteractive apt-get install -y -qq python3-venv ffmpeg
+  python3 -m venv /opt/exilados-voz
+  /opt/exilados-voz/bin/pip install 'edge-tts==7.3.1'
+fi
+
 passo "exilados-api"
 install -d /opt/exilados
 API_ALTERADA=0

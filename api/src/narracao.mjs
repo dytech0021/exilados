@@ -1,14 +1,13 @@
-// Narração da sala de voz com voz sintética do demo oficial do Qwen3-TTS (Hugging Face), sem conta nem chave. O demo
-// não atende o servidor (IP de datacenter fica sem cota de GPU), então quem gera é o aparelho de quem está na sala:
-// ele pede aqui a frase e a descrição da voz, gera no demo e manda o endereço do áudio; o servidor baixa (só do demo),
-// confere que é WAV e guarda em disco para todo o grupo. Sem áudio guardado, o site fala com a voz do aparelho.
+// Francisca Neural brasileira, gerada no servidor e guardada em disco para todo o grupo.
+// O importador do demo antigo permanece para compatibilidade com aparelhos ainda abertos na versão anterior.
 import { createHash } from 'node:crypto';
 import { mkdir, readFile, readdir, rename, unlink, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
+import { gerarVozNeural } from './voz-neural.mjs';
 
 const ORIGEM = 'https://qwen-qwen3-tts.hf.space';
-const VERSAO = 'carioca-1';
+const VERSAO = 'francisca-neural-12-v1';
 const MAX_AUDIO = 1024 * 1024;
 const DESCRICAO = 'An adult Brazilian woman with a warm, feminine, slightly husky, sensual and playful voice. '
   + 'Speak native Brazilian Portuguese with an unmistakable Rio de Janeiro carioca accent, including soft chiado in syllable-final S. '
@@ -41,9 +40,42 @@ function conferirWav(audio) {
 const limparNome = (nome) => String(nome || '').trim().replace(/\s+/g, ' ').slice(0, 80);
 
 export class Narracao {
-  constructor({ pasta = join(process.env.STATE_DIRECTORY || tmpdir(), 'exilados-narracao'), baixar = globalThis.fetch } = {}) {
+  constructor({ pasta = join(process.env.STATE_DIRECTORY || tmpdir(), 'exilados-narracao'), baixar = globalThis.fetch, gerar = gerarVozNeural } = {}) {
     this.pasta = pasta;
     this.baixar = baixar;
+    this.gerar = gerar;
+    this.pendentes = new Map();
+    this.fila = Promise.resolve();
+    this.tentarDepois = 0;
+  }
+
+  /** Reutiliza o WAV, agrupa pedidos iguais e limita a geração a um processo por vez. */
+  async obter(nome, evento) {
+    const pedido = this.pedido(nome, evento);
+    if (!pedido) return null;
+    const audio = await this.guardado(nome, evento);
+    if (audio) return audio;
+    const arquivo = this.#arquivo(nome, evento);
+    if (this.pendentes.has(arquivo)) return this.pendentes.get(arquivo);
+    if (Date.now() < this.tentarDepois || this.pendentes.size >= 32) return null;
+    const trabalho = this.fila.then(async () => {
+      if (Date.now() < this.tentarDepois) return null;
+      try {
+        const wav = conferirWav(await this.gerar(pedido.texto));
+        await mkdir(this.pasta, { recursive: true });
+        const arquivos = (await readdir(this.pasta)).filter((f) => /^[a-f0-9]{64}\.wav$/.test(f));
+        if (arquivos.length >= 256) await unlink(join(this.pasta, arquivos[0])).catch(() => {});
+        await writeFile(`${arquivo}.novo`, wav);
+        await rename(`${arquivo}.novo`, arquivo);
+        return wav.toString('base64');
+      } catch {
+        this.tentarDepois = Date.now() + 60000;
+        return null;
+      }
+    }).finally(() => this.pendentes.delete(arquivo));
+    this.pendentes.set(arquivo, trabalho);
+    this.fila = trabalho.catch(() => {});
+    return trabalho;
   }
 
   #arquivo(nome, evento) {

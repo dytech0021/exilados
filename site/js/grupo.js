@@ -180,6 +180,7 @@ export function desenharPainelVoz(painel) {
         ? botaoIcone('tela', v.tela ? 'Opções da sua transmissão' : 'Compartilhar a tela', (e) => menuDaTela(e.currentTarget), v.tela ? 'no-ar' : '')
         : null,
       botaoIcone('fone', voz.ANDROID ? 'Fone ou celular' : 'Microfone', (e) => menuDeAparelhos(e.currentTarget)),
+      botaoIcone('celular', 'Webcam do celular', () => nav.abrirConfig('webcam')),
       botaoIcone('desligar', 'Sair da sala de voz', () => voz.sair().catch(erro))),
     v.tela ? el('div', { class: 'compartilhando' },
       el('span', { class: 'ao-vivo', text: 'Ao vivo' }),

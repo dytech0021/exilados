@@ -36,6 +36,7 @@ import {
 } from './android.js';
 import { svgDoQr } from './qr.js';
 import * as voz from './voz.js';
+import { pararWebcam } from './webcam.js';
 
 const $ = (id) => document.getElementById(id);
 const partes = {
@@ -257,6 +258,7 @@ function acompanhar() {
     else limpar(partes.topo, botaoMenu(), el('div', { class: 'titulo' }, icone('hash'), el('span', { text: sala.nome })), botaoMembros());
   });
   ouvir('removido', async () => {
+    await pararWebcam();
     await voz.sair().catch(() => {});
     fecharTodasLives();
     fecharTela();
@@ -283,6 +285,7 @@ async function abrirApp() {
   $('entrada').hidden = true;
   $('carregando').hidden = true;
   $('app').hidden = false;
+  if (new URLSearchParams(location.search).get('webcam') === '1') abrirConfig('webcam');
   limpar($('ir-dm'), icone('balao'));
   $('ir-dm').addEventListener('click', () => {
     if (estado.modo === 'dm') return;

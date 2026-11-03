@@ -46,10 +46,11 @@ let sala = null;
 let microfone = null; // { bruto, ctx, ganho, analisador, faixa, trilha }
 let tela = null; // a própria tela compartilhada: { fluxo, video, som }
 let saindo = false;
+let webcamLocal = null;
 const elementos = new Map(); // faixa -> <audio>
 const narrador = criarNarrador({ buscarAudio: buscarAnuncio });
 
-/** Áudio da narração guardado no servidor; sem ele, gera neste aparelho e manda o servidor guardar para todos. */
+/** Áudio neural do servidor (o ramo gerar atende APIs antigas durante a atualização). */
 async function buscarAnuncio(usuario, evento) {
   const r = await api.chamar('/voz/anuncio', { usuario, evento });
   if (r.audio || !r.gerar) return r;
@@ -178,7 +179,7 @@ export function definirVolumeDaTela(porcento) {
 
 // ---------- LiveKit ----------
 
-function carregarLiveKit() {
+export function carregarLiveKit() {
   if (window.LivekitClient) return Promise.resolve(window.LivekitClient);
   return new Promise((resolve, reject) => {
     const script = document.createElement('script');
@@ -362,9 +363,44 @@ async function publicarMicrofone() {
 
 const ehDaTela = (pub) => pub.source === LK.Track.Source.ScreenShare || pub.source === LK.Track.Source.ScreenShareAudio;
 
+/** A câmera do celular entra como vídeo da chamada, sem microfone nem outra identidade na lista. */
+export async function publicarWebcam(faixa) {
+  if (!sala || voz.situacao !== 'conectada') throw Error('Entre numa sala de voz ou chamada primeiro.');
+  await pararWebcam();
+  const room = sala;
+  const camera = new LK.LocalVideoTrack(faixa.clone(), undefined, true);
+  try {
+    await room.localParticipant.publishTrack(camera, { source: LK.Track.Source.Camera,
+      videoCodec: 'h264', simulcast: true, videoEncoding: { maxBitrate: 1800000, maxFramerate: 30 } });
+    if (sala !== room) { camera.stop(); return; }
+    webcamLocal = camera;
+    avisar('webcams');
+  } catch (erro) { camera.stop(); throw erro; }
+}
+
+export async function pararWebcam() {
+  const camera = webcamLocal;
+  webcamLocal = null;
+  if (camera) {
+    try { await sala?.localParticipant.unpublishTrack(camera); } finally { camera.stop(); avisar('webcams'); }
+  }
+}
+
+export function webcamsNaSala() {
+  const cameras = new Map();
+  if (!sala) return cameras;
+  if (webcamLocal) cameras.set(meuId(), webcamLocal);
+  for (const participante of sala.remoteParticipants.values()) {
+    for (const pub of participante.trackPublications.values()) {
+      if (pub.source === LK.Track.Source.Camera && pub.track && !pub.isMuted) cameras.set(participante.identity, pub.track);
+    }
+  }
+  return cameras;
+}
+
 /** A voz de todos é recebida sempre; a tela (vídeo e som), só a de quem está sendo assistido; câmera, nunca. */
 function decidirRecebimento(pub, participante) {
-  const receber = ehDaTela(pub) ? assistidas.has(participante.identity) : pub.kind === 'audio';
+  const receber = ehDaTela(pub) ? assistidas.has(participante.identity) : pub.kind === 'audio' || pub.source === LK.Track.Source.Camera;
   if (receber && pub.source === LK.Track.Source.ScreenShare) pub.setVideoQuality(qualidadeDe(participante.identity, pub));
   if (receber) pub.setSubscribed(true);
 }
@@ -372,6 +408,7 @@ function decidirRecebimento(pub, participante) {
 function anexar(faixa, pub, participante) {
   if (faixa.kind !== 'audio') {
     if (ehDaTela(pub)) avisar('telas');
+    if (pub.source === LK.Track.Source.Camera) avisar('webcams');
     return;
   }
   // Som da voz e som da tela: cada um num <audio> (o vídeo da tela é mostrado por tela.js).
@@ -384,6 +421,7 @@ function anexar(faixa, pub, participante) {
 }
 
 function desanexar(faixa, pub) {
+  if (pub?.source === LK?.Track.Source.Camera) avisar('webcams');
   // A biblioteca às vezes já soltou a faixa do <audio> antes do aviso: remove o elemento guardado de qualquer jeito.
   const elemento = elementos.get(faixa);
   if (elemento) {
@@ -403,6 +441,8 @@ function soltarTela() {
 }
 
 function limpar() {
+  webcamLocal?.stop();
+  webcamLocal = null;
   narrador.cancelar();
   for (const faixa of [...elementos.keys()]) desanexar(faixa);
   reforco?.close().catch(() => {});
@@ -416,6 +456,7 @@ function limpar() {
   tamanhos.clear();
   destaque = null;
   sala = null;
+  avisar('webcams');
   estado.vozLocal = null;
   estado.falandoNaSala.clear();
   avisarQueFalo(false);
@@ -450,7 +491,7 @@ function prepararAnuncios(room = sala) {
     .filter((id) => estado.membros.get(id)?.ativo).slice(0, 12);
   preparoDosAnuncios = preparoDosAnuncios.then(async () => {
     for (const id of ids) {
-      for (const evento of ['entrou', 'saiu']) {
+      for (const evento of ['entrou', 'saiu', 'live']) {
         if (!podeNarrar(room)) return;
         await narrador.preparar(id, nomeDe(id), evento);
       }
@@ -477,7 +518,7 @@ function montarEventos(LKC, room) {
       decidirRecebimento(pub, participante);
       if (ehDaTela(pub)) avisar('telas');
     })
-    .on(E.TrackUnpublished, (pub) => { if (ehDaTela(pub)) avisar('telas'); })
+    .on(E.TrackUnpublished, (pub) => { if (ehDaTela(pub)) avisar('telas'); avisar('webcams'); })
     .on(E.TrackSubscribed, (faixa, pub, participante) => anexar(faixa, pub, participante))
     .on(E.TrackUnsubscribed, (faixa, pub) => desanexar(faixa, pub))
     .on(E.LocalTrackUnpublished, (pub) => {
@@ -525,6 +566,7 @@ function montarEventos(LKC, room) {
       sincronizarParticipantes(room, { saiu: participante.identity });
       mudou();
       avisar('telas');
+      avisar('webcams');
       narrar(participante, 'saiu');
     })
     .on(E.Disconnected, (motivo) => {

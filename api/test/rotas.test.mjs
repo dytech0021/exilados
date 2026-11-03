@@ -191,6 +191,46 @@ test('saúde responde sem login, com a hora do servidor', async () => {
   } finally { t.fechar(); }
 });
 
+test('webcam privada só liga os aparelhos da mesma conta e nunca autoriza microfone', async () => {
+  const t = await montar();
+  try {
+    for (const papel of ['celular', 'pc']) {
+      const r = await t.chamar('POST', '/webcam/conectar', { quem: ANA, corpo: { papel } });
+      assert.equal(r.status, 200);
+      const jwt = lerJwt(r.dados.token, SEGREDO_LK);
+      assert.equal(jwt.video.room, `webcam-privada-${ANA}`);
+      assert.equal(jwt.sub, `${ANA}:${papel}`);
+      assert.equal(jwt.video.canPublish, papel === 'celular');
+      assert.equal(jwt.video.canSubscribe, papel === 'pc');
+      assert.deepEqual(jwt.video.canPublishSources, papel === 'celular' ? ['camera'] : []);
+    }
+    assert.equal((await t.chamar('POST', '/webcam/conectar', { quem: ANA, corpo: { papel: 'pc', usuario: DONO } })).status, 403);
+    assert.equal((await t.chamar('POST', '/webcam/conectar', { quem: FORA, corpo: { papel: 'celular' } })).status, 403);
+    assert.equal((await t.chamar('POST', '/webcam/conectar', { corpo: { papel: 'celular' } })).status, 401);
+  } finally { t.fechar(); }
+});
+
+test('webcam de live permite só câmera ao dono e só recepção aos membros, enquanto a live está no ar', async () => {
+  const t = await montar();
+  try {
+    const corpo = { papel: 'assistir', usuario: DONO, aparelho: CONVERSA };
+    assert.equal((await t.chamar('POST', '/webcam/conectar', { quem: ANA, corpo })).status, 404);
+    t.sb.banco.lives.set(DONO, { user_id: DONO, ultimo_sinal: new Date(t.relogio.t).toISOString() });
+    const r = await t.chamar('POST', '/webcam/conectar', { quem: ANA, corpo });
+    assert.equal(r.status, 200);
+    const jwt = lerJwt(r.dados.token, SEGREDO_LK);
+    assert.equal(jwt.video.room, `webcam-live-${DONO}`);
+    assert.equal(jwt.video.canPublish, false);
+    assert.deepEqual(jwt.video.canPublishSources, []);
+    assert.equal((await t.chamar('POST', '/webcam/conectar', { quem: ANA, corpo: { ...corpo, aparelho: 'invalido' } })).status, 400);
+    const p = await t.chamar('POST', '/webcam/conectar', { quem: DONO, corpo: { papel: 'publicar', usuario: ANA } });
+    assert.equal(p.status, 200);
+    assert.equal(lerJwt(p.dados.token, SEGREDO_LK).video.room, `webcam-live-${DONO}`);
+    t.relogio.t += 61000;
+    assert.equal((await t.chamar('POST', '/webcam/conectar', { quem: ANA, corpo })).status, 404);
+  } finally { t.fechar(); }
+});
+
 test('narração só de membro ativo, com o nome do banco e evento válido', async () => {
   const pedidos = [];
   const guardados = new Map();
@@ -210,10 +250,10 @@ test('narração só de membro ativo, com o nome do banco e evento válido', asy
     assert.equal((await t.chamar('POST', '/voz/anuncio', { quem: FORA, corpo: { usuario: ANA, evento: 'entrou' } })).status, 403);
     assert.equal((await t.chamar('POST', '/voz/anuncio', { quem: DONO, corpo: { usuario: ANA, evento: 'outro' } })).status, 400);
     assert.equal((await t.chamar('POST', '/voz/anuncio', { quem: DONO, corpo: { usuario: FORA, evento: 'entrou' } })).status, 404);
-    // Ainda sem áudio: o aparelho recebe o que gerar, com o nome do banco (não o que veio no pedido).
+    // Sem áudio pronto: não delega a geração ao demo no aparelho.
     const r = await t.chamar('POST', '/voz/anuncio', { quem: DONO, corpo: { usuario: ANA, evento: 'entrou', nome: 'Nome falso' } });
     assert.equal(r.status, 200);
-    assert.deepEqual(r.dados, { audio: null, gerar: { texto: 'Ana entrou' } });
+    assert.deepEqual(r.dados, { audio: null });
     const ruim = await t.chamar('POST', '/voz/anuncio/guardar', { quem: DONO, corpo: { usuario: ANA, evento: 'entrou', url: 'http://x' } });
     assert.equal(ruim.status, 422);
     const g = await t.chamar('POST', '/voz/anuncio/guardar', { quem: DONO, corpo: { usuario: ANA, evento: 'entrou', url: 'https://ok' } });

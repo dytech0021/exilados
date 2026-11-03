@@ -3,17 +3,21 @@ plugins {
     id("org.jetbrains.kotlin.android")
 }
 
+val webcamCompanion = providers.gradleProperty("webcamCompanion").orNull == "true"
+
 android {
     namespace = "com.dytech.exilados"
     compileSdk = 35
 
     defaultConfig {
-        applicationId = "com.dytech.exilados"
+        applicationId = if (webcamCompanion) "com.dytech.exilados.webcam" else "com.dytech.exilados"
+        manifestPlaceholders["nomeApp"] = if (webcamCompanion) "Exilados Webcam" else "Exilados"
+        buildConfigField("boolean", "WEBCAM_COMPANION", webcamCompanion.toString())
         minSdk = 26
         targetSdk = 35
         // A cada APK publicado: versionCode sobe de um em um; versionName acompanha a versão do programa do Windows.
-        versionCode = 4
-        versionName = "1.0.10"
+        versionCode = 5
+        versionName = "1.0.11"
     }
 
     // A chave que assina o APK fica fora do repositório (ele é público): gerar-apk.ps1 passa o arquivo e a senha

@@ -13,6 +13,7 @@ import {
   avatar, aviso, botaoIcone, confirmar, copiar, el, erro, icone, janela, limpar,
 } from './ui.js';
 import * as voz from './voz.js';
+import { paginaWebcam, pararWebcam } from './webcam.js';
 
 let aberta = null;
 
@@ -90,6 +91,7 @@ async function sairDaConta() {
   const ok = await confirmar({ titulo: 'Sair da conta', texto: 'Tem certeza de que quer sair do Exilados neste navegador?', botao: 'Sair', perigo: true });
   if (!ok) return;
   await voz.sair().catch(() => {});
+  await pararWebcam();
   await sair();
 }
 
@@ -384,6 +386,7 @@ async function paginaTransmitir(secao) {
 const PAGINAS = {
   conta: { rotulo: 'Minha conta', montar: paginaConta },
   voz: { rotulo: 'Voz e áudio', montar: paginaVoz },
+  webcam: { rotulo: 'Webcam do celular', montar: paginaWebcam },
   transmitir: { rotulo: 'Transmitir', montar: paginaTransmitir },
   salas: { rotulo: 'Salas', montar: paginaSalas, dono: true },
   membros: { rotulo: 'Membros', montar: paginaMembros, dono: true },
@@ -420,7 +423,7 @@ export function abrirConfig(pagina) {
       el('small', { text: `Site ${VERSAO_SITE}${COMMIT_SITE ? ` (${COMMIT_SITE})` : ''}` })),
     el('div', { class: 'separador' }),
     el('h4', { text: 'Configurações de usuário' }),
-    ['conta', 'voz', 'transmitir'].map((p) => el('button', { dataset: { pagina: p }, text: PAGINAS[p].rotulo, onclick: () => mostrarPagina(p) })),
+    ['conta', 'voz', 'webcam', 'transmitir'].map((p) => el('button', { dataset: { pagina: p }, text: PAGINAS[p].rotulo, onclick: () => mostrarPagina(p) })),
     souDono() ? [el('div', { class: 'separador' }), el('h4', { text: 'Grupo Exilados' }),
       ['salas', 'membros'].map((p) => el('button', { dataset: { pagina: p }, text: PAGINAS[p].rotulo, onclick: () => mostrarPagina(p) }))] : null,
     el('div', { class: 'separador' }),

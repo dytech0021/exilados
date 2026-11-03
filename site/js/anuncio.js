@@ -1,4 +1,4 @@
-// Anúncios neurais com cache e leitura do aparelho como alternativa quando o serviço gratuito não responde.
+// Anúncios neurais preparados no servidor; leitura do aparelho como alternativa durante indisponibilidade.
 
 const FRASES = {
   entrou: ['{nome} brotou na sala', '{nome} chegou', 'Olha só, {nome} chegou'],
@@ -37,8 +37,8 @@ export function anunciar(nome, evento, { ligado, surdo, sorteio = Math.random, .
   if (!ligado || surdo || !sintese || !Fala || !texto) return false;
   const fala = new Fala(texto);
   fala.lang = 'pt-BR';
-  fala.rate = 1.16;
-  fala.pitch = 0.97;
+  fala.rate = 1.24;
+  fala.pitch = 1;
   const voz = escolherVoz(sintese.getVoices());
   if (voz) fala.voice = voz;
   sintese.speak(fala);
@@ -71,7 +71,7 @@ async function tocarNoNavegador(base64, signal) {
   const bytes = Uint8Array.from(atob(base64), (c) => c.charCodeAt(0));
   const endereco = URL.createObjectURL(new Blob([bytes], { type: 'audio/wav' }));
   const audio = new Audio(endereco);
-  audio.playbackRate = 1.06;
+  audio.playbackRate = 1;
   return new Promise((resolve, reject) => {
     const soltar = () => URL.revokeObjectURL(endereco);
     const parar = () => { audio.pause(); audio.removeAttribute('src'); soltar(); resolve(); };

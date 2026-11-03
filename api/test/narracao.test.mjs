@@ -57,3 +57,37 @@ test('não baixa de fora do serviço de voz nem guarda o que não é WAV', async
 test('a live tem frase própria na voz neural', () => {
   assert.equal(new Narracao({ pasta: 'x' }).pedido('Ana', 'live').texto, 'Ana abriu uma live!');
 });
+
+test('gera no servidor uma vez por frase, agrupa pedidos simultâneos e persiste o WAV', async () => {
+  await comPasta(async (pasta) => {
+    const frases = [];
+    let ativos = 0, maximo = 0;
+    const gerar = async (texto) => {
+      frases.push(texto);
+      maximo = Math.max(maximo, ++ativos);
+      await new Promise((r) => setTimeout(r, 10));
+      ativos--;
+      return wav;
+    };
+    const narracao = new Narracao({ pasta, gerar });
+    const audios = await Promise.all([
+      narracao.obter('Ana', 'entrou'), narracao.obter('Ana', 'entrou'),
+      narracao.obter('Ana', 'saiu'), narracao.obter('Ana', 'live'),
+    ]);
+    assert.ok(audios.every((a) => a === wav.toString('base64')));
+    assert.deepEqual(frases, ['Ana chegou, hein!', 'Ana meteu o pé!', 'Ana abriu uma live!']);
+    assert.equal(maximo, 1);
+    assert.equal(await new Narracao({ pasta, gerar: () => { throw Error('não deve gerar'); } }).obter('Ana', 'live'), audios[0]);
+  });
+});
+
+test('falha na voz neural permite alternativa local e pausa novas gerações por um minuto', async () => {
+  await comPasta(async (pasta) => {
+    let chamadas = 0;
+    const narracao = new Narracao({ pasta, gerar: () => { chamadas++; throw Error('offline'); } });
+    assert.equal(await narracao.obter('Ana', 'entrou'), null);
+    assert.equal(await narracao.obter('Ana', 'live'), null);
+    assert.equal(await narracao.obter('Ana', 'outro'), null);
+    assert.equal(chamadas, 1);
+  });
+});

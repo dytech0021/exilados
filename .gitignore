@@ -17,3 +17,5 @@ livekit.yaml
 ferramentas/demo/*.env
 *.exk
 *.dpapi
+*.jks
+*.keystore

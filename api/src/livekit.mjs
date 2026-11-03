@@ -59,6 +59,11 @@ export class LiveKit {
     let removido = 0;
     for (const sala of await this.listarSalas()) {
       if (await this.removerParticipante(sala, identidade)) removido += 1;
+      if (sala.startsWith('webcam-')) {
+        for (const pessoa of await this.participantes(sala)) {
+          if (pessoa.startsWith(`${identidade}:`) && await this.removerParticipante(sala, pessoa)) removido += 1;
+        }
+      }
     }
     return removido;
   }

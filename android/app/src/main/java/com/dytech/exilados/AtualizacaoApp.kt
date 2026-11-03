@@ -258,7 +258,7 @@ class AtualizacaoApp(private val atividade: MainActivity) {
     }
 
     companion object {
-        private const val BASE = "https://filabox3d.com.br/exilados/atualizacao/"
+        private val BASE = "https://filabox3d.com.br/exilados/atualizacao/" + if (BuildConfig.WEBCAM_COMPANION) "webcam/" else ""
         private const val INTERVALO_MS = 30 * 60 * 1000L
         private const val PREFS = "exilados"
         private const val ULTIMA_PROCURA = "ultimaProcuraAtualizacao"
