@@ -27,8 +27,7 @@ PrivateDevices=yes
 ProtectKernelTunables=yes
 ProtectKernelModules=yes
 ProtectControlGroups=yes
-# AF_UNIX: o edge-tts (Python asyncio) abre um socketpair local ao iniciar.
-RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6
+RestrictAddressFamilies=AF_INET AF_INET6
 RestrictNamespaces=yes
 LockPersonality=yes
 CapabilityBoundingSet=
