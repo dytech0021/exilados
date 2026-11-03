@@ -26,6 +26,8 @@ try {
     New-Item -ItemType Directory -Force 'C:\Temp' | Out-Null
     $env:JAVA_TOOL_OPTIONS = "$antesJava -Djdk.net.unixdomain.tmpdir=C:\Temp".Trim()
     $PSNativeCommandUseErrorActionPreference = $false
+    # No Windows PowerShell 5.1 o aviso do Java no stderr ("Picked up JAVA_TOOL_OPTIONS") viraria erro: confere-se o código de saída.
+    $ErrorActionPreference = 'Continue'
     if (-not (Test-Path $chave)) {
         & (Join-Path $env:JAVA_HOME 'bin\keytool.exe') -genkeypair -keystore $chave -storetype PKCS12 -alias exilados `
             -keyalg RSA -keysize 3072 -validity 36500 -dname 'CN=Exilados Webcam' `

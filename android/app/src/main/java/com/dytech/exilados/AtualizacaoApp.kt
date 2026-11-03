@@ -42,6 +42,8 @@ class AtualizacaoApp(private val atividade: MainActivity) {
     private var pronta: Atualizacao? = null
     private var dispensada = 0
     private var instalando = false
+    /** A procura em andamento foi pedida no botão: o resultado aparece mesmo sem versão nova. */
+    private var avisarResultado = false
     private val periodica = object : Runnable {
         override fun run() {
             if (!naFrente) return
@@ -78,11 +80,25 @@ class AtualizacaoApp(private val atividade: MainActivity) {
         return true
     }
 
-    private fun procurar() {
+    /** "Buscar atualização" nas configurações do site: procura na hora, sem esperar o intervalo, e diz o resultado. */
+    fun buscarAgora() {
+        if (instalando) return
+        if (pronta != null) {
+            dispensada = 0
+            mostrarAviso()
+            perguntar()
+            return
+        }
+        avisarResultado = true
+        atividade.avisar("Procurando atualização...")
+        procurar(pedida = true)
+    }
+
+    private fun procurar(pedida: Boolean = false) {
         if (procurando || instalando) return
         val agora = System.currentTimeMillis()
         val prefs = atividade.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
-        if (pronta == null && agora - prefs.getLong(ULTIMA_PROCURA, 0) < INTERVALO_MS) return
+        if (!pedida && pronta == null && agora - prefs.getLong(ULTIMA_PROCURA, 0) < INTERVALO_MS) return
         prefs.edit().putLong(ULTIMA_PROCURA, agora).apply()
         procurando = true
         val contexto = atividade.applicationContext
@@ -99,9 +115,18 @@ class AtualizacaoApp(private val atividade: MainActivity) {
             }
             principal.post {
                 procurando = false
-                resultado.getOrNull()?.let {
-                    pronta = it
+                val nova = resultado.getOrNull()
+                if (nova != null) {
+                    pronta = nova
                     mostrarAviso()
+                }
+                if (avisarResultado && !atividade.isFinishing) {
+                    avisarResultado = false
+                    when {
+                        nova != null -> perguntar()
+                        resultado.isFailure -> atividade.avisar("Não deu para procurar atualização: ${resultado.exceptionOrNull()?.message ?: "sem resposta do servidor"}")
+                        else -> atividade.avisar("Você já está na versão mais nova (${BuildConfig.VERSION_NAME}).")
+                    }
                 }
             }
         }

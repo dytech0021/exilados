@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { avisoDeVideo, avisoDeVoz, versaoDoApp } from '../js/android.js';
+import { avisoDeVideo, avisoDeVoz, buscaDeAtualizacao, versaoDoApp } from '../js/android.js';
 
 function appFalso() {
   const chamadas = [];
@@ -42,4 +42,13 @@ test('fora do app (navegador) não faz nada', () => {
 test('um app que falha ao receber o aviso não derruba o site', () => {
   const avisar = avisoDeVoz({ voz: () => { throw new Error('app antigo'); } });
   assert.doesNotThrow(() => avisar(true, 'Geral'));
+});
+
+test('buscar atualização só aparece no app que tem a opção', () => {
+  let pedidos = 0;
+  const buscar = buscaDeAtualizacao({ buscarAtualizacao: () => { pedidos += 1; } });
+  buscar();
+  assert.equal(pedidos, 1);
+  assert.equal(buscaDeAtualizacao({ voz() {} }), null);
+  assert.equal(buscaDeAtualizacao(undefined), null);
 });

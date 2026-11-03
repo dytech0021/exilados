@@ -320,6 +320,10 @@ class MainActivity : Activity() {
             comVideo = sim
             runCatching { setPictureInPictureParams(parametrosDaJanela()) }
         }
+
+        /** O botão "Buscar atualização do app" nas configurações. */
+        @JavascriptInterface
+        fun buscarAtualizacao() = runOnUiThread { atualizacao.buscarAgora() }
     }
 
     private companion object {

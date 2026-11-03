@@ -10,6 +10,11 @@ export function versaoDoApp(agente) {
   return /ExiladosAndroid\/(\d+\.\d+\.\d+)/.exec(agente || '')?.[1] || null;
 }
 
+/** O app procura versão nova na hora (app 1.0.12 em diante); null quando o app não tem essa opção. */
+export function buscaDeAtualizacao(app) {
+  return typeof app?.buscarAtualizacao === 'function' ? () => app.buscarAtualizacao() : null;
+}
+
 /**
  * Devolve `avisar(tipoDaVista)`, que conta ao `app` quando há vídeo na tela (live ou tela compartilhada): com vídeo, o
  * app vira janela flutuante ao sair dele. Só as mudanças; sem app, nada.

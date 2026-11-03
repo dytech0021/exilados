@@ -6,7 +6,7 @@ import { formatarId, lerId, limparNome, ordenarPorNome } from './formato.js';
 import { conferirArquivo, LADO_PERFIL, reduzirImagem } from './imagens.js';
 import { abrirTransmitir, noPrograma, versaoDoPrograma } from './programa.js';
 import { COMMIT_SITE, VERSAO_SITE } from './versao.js';
-import { versaoDoApp } from './android.js';
+import { buscaDeAtualizacao, versaoDoApp } from './android.js';
 import { api, conferir, sb } from './supa.js';
 import { sair } from './auth.js';
 import {
@@ -415,12 +415,14 @@ export function abrirConfig(pagina) {
     return;
   }
   const app = versaoDoApp(navigator.userAgent);
+  const buscarAtualizacao = buscaDeAtualizacao(window.ExiladosAndroid);
   const nav = el('nav', {},
     // As versões no topo (ajudam a saber se a atualização já chegou).
     el('div', { class: 'versoes' },
       app ? el('small', { text: `App ${app} para Android` }) : null,
       noPrograma ? el('small', { text: `Programa ${versaoDoPrograma} para Windows` }) : null,
       el('small', { text: `Site ${VERSAO_SITE}${COMMIT_SITE ? ` (${COMMIT_SITE})` : ''}` })),
+    buscarAtualizacao ? el('button', { text: 'Buscar atualização do app', onclick: buscarAtualizacao }) : null,
     el('div', { class: 'separador' }),
     el('h4', { text: 'Configurações de usuário' }),
     ['conta', 'voz', 'webcam', 'transmitir'].map((p) => el('button', { dataset: { pagina: p }, text: PAGINAS[p].rotulo, onclick: () => mostrarPagina(p) })),
