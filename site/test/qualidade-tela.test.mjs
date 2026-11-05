@@ -20,11 +20,11 @@ test('várias telas abertas vêm em 720p cada; a que estiver em tela cheia, na q
   assert.equal(qualidadeRecebida(lk, false, false, { varias: true }), lk.VideoQuality.HIGH);
 });
 
-test('uma tela 1080p oferece resolução leve para o celular sem perder a original', () => {
+test('uma tela 1080p vai só com a camada leve e a original (cada camada a mais é um codificador a mais no PC de quem transmite)', () => {
   const opcoes = opcoesPublicacaoTela(lk, { largura: 1920, altura: 1080, bitrate: 6_000_000, fps: 60 });
   assert.equal(opcoes.simulcast, true);
   assert.equal(opcoes.screenShareEncoding.maxBitrate, 6_000_000);
-  assert.deepEqual(opcoes.screenShareSimulcastLayers, [lk.VideoPresets.h360, lk.VideoPresets.h720]);
+  assert.deepEqual(opcoes.screenShareSimulcastLayers, [lk.VideoPresets.h360]);
   assert.equal(qualidadeRecebida(lk, true, true), lk.VideoQuality.LOW);
   assert.equal(qualidadeRecebida(lk, false, true), lk.VideoQuality.HIGH);
   assert.equal(qualidadeRecebida(lk, true, false), lk.VideoQuality.HIGH);
@@ -51,4 +51,15 @@ test('sem medida da janela, vale a regra de antes (várias abertas = 720p)', () 
   assert.equal(qualidadeRecebida(lk, false, true, {}), lk.VideoQuality.HIGH);
   // Tela cheia pede o máximo mesmo que a medida ainda seja a antiga.
   assert.equal(qualidadeRecebida(lk, false, true, { larguraVista: 400, destaque: true }), lk.VideoQuality.HIGH);
+});
+
+test('sem a camada do meio, a janela média recebe a original em vez de cair para 360p', () => {
+  const media = { larguraVista: 1000 };
+  assert.equal(qualidadeRecebida(lk, false, true, { ...media, camadas: 2 }), lk.VideoQuality.HIGH);
+  // Quem ainda transmite com as 3 camadas (versão anterior do site) continua dando 720p na janela média.
+  assert.equal(qualidadeRecebida(lk, false, true, { ...media, camadas: 3 }), lk.VideoQuality.MEDIUM);
+  // Janelinha continua na leve, com 2 ou 3 camadas.
+  assert.equal(qualidadeRecebida(lk, false, true, { larguraVista: 480, camadas: 2 }), lk.VideoQuality.LOW);
+  // Várias abertas sem medida ainda: sem a do meio, a original.
+  assert.equal(qualidadeRecebida(lk, false, true, { varias: true, camadas: 2 }), lk.VideoQuality.HIGH);
 });

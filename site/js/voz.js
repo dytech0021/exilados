@@ -831,6 +831,8 @@ const qualidadeDe = (id, pub) => qualidadeRecebida(LK, CELULAR, pub.simulcasted,
   destaque: destaque === id,
   larguraVista: tamanhos.get(id)?.largura || 0,
   densidade: tamanhos.get(id)?.densidade || 1,
+  // Quantas camadas quem transmite publicou (as transmissões novas têm 2; sem a informação, as 3 de antes).
+  camadas: pub.trackInfo?.layers?.length || 3,
 });
 
 /** Com mais ou menos telas abertas (ou outra em tela cheia), cada uma passa a vir na camada certa. */
