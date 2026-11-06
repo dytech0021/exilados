@@ -67,26 +67,63 @@ internal sealed record ProgramaAberto(long Janela, int Processo, long Iniciado, 
 }
 
 /// <summary>
-/// Imagem de um programa pela captura de janelas do Windows (Windows Graphics Capture, pelo FFmpeg). Ela só manda
-/// quadro quando a janela muda: o último fica guardado e é repetido no ritmo da live, para um programa parado
-/// ainda começar a live e o som não ficar esperando.
+/// Quadros BGRA de uma captura que só manda imagem quando a tela muda: o último fica guardado e é repetido no ritmo
+/// da live, para uma imagem parada ainda começar a live e o som não ficar esperando.
 /// </summary>
-internal sealed class CapturaPrograma : IAsyncDisposable
+internal abstract class CapturaQuadros : IAsyncDisposable
 {
-    private readonly ProcessoVideo _captura;
-    private readonly CancellationTokenSource _parar = new();
-    private readonly object _trava = new();
-    private readonly byte[] _ultimo;
-    private readonly Task _leitura;
-    private readonly TaskCompletionSource _primeiro = new(TaskCreationOptions.RunContinuationsAsynchronously);
-    private volatile Exception? _falha;
-    private readonly int _quadros;
+    protected readonly object _trava = new();
+    protected readonly byte[] _ultimo;
+    protected readonly TaskCompletionSource _primeiro = new(TaskCreationOptions.RunContinuationsAsynchronously);
+    protected volatile Exception? _falha;
+    protected readonly int _quadros;
 
-    public CapturaPrograma(ProgramaAberto programa, int largura, int altura, int quadros)
+    protected CapturaQuadros(int largura, int altura, int quadros)
     {
         if (largura < 2 || altura < 2 || (long)largura * altura > 16777216) throw new ExiladosException("A janela é grande demais para transmitir.");
         _quadros = quadros;
         _ultimo = new byte[checked(largura * altura * 4)];
+    }
+
+    /// <summary>Espera o primeiro quadro (ou a falha da captura).</summary>
+    public Task PrimeiroAsync(TimeSpan limite, CancellationToken ct) => _primeiro.Task.WaitAsync(limite, ct);
+
+    /// <summary>Uma cópia do último quadro.</summary>
+    public byte[] Copia()
+    {
+        lock (_trava) return (byte[])_ultimo.Clone();
+    }
+
+    public async Task BombearAsync(NamedPipeServerStream cano, CancellationToken ct)
+    {
+        await cano.WaitForConnectionAsync(ct);
+        await _primeiro.Task.WaitAsync(TimeSpan.FromSeconds(12), ct);
+        byte[] quadro = new byte[_ultimo.Length];
+        long inicio = Stopwatch.GetTimestamp(), escritos = 0;
+        while (!ct.IsCancellationRequested)
+        {
+            if (_falha is { } falha) throw falha;
+            lock (_trava) _ultimo.CopyTo(quadro, 0);
+            await cano.WriteAsync(quadro, ct);
+            escritos++;
+            double espera = escritos * 1000.0 / _quadros - Stopwatch.GetElapsedTime(inicio).TotalMilliseconds;
+            if (espera > 0) await Task.Delay(TimeSpan.FromMilliseconds(espera), ct);
+            else if (espera < -200) { inicio = Stopwatch.GetTimestamp(); escritos = 0; }
+        }
+    }
+
+    public abstract ValueTask DisposeAsync();
+}
+
+/// <summary>Imagem de um programa pela captura de janelas do Windows (Windows Graphics Capture, pelo FFmpeg).</summary>
+internal sealed class CapturaPrograma : CapturaQuadros
+{
+    private readonly ProcessoVideo _captura;
+    private readonly CancellationTokenSource _parar = new();
+    private readonly Task _leitura;
+
+    public CapturaPrograma(ProgramaAberto programa, int largura, int altura, int quadros) : base(largura, altura, quadros)
+    {
         _captura = new ProcessoVideo(Argumentos(programa, largura, altura, quadros));
         _leitura = Task.Run(async () =>
         {
@@ -116,25 +153,7 @@ internal sealed class CapturaPrograma : IAsyncDisposable
         $"gfxcapture=hwnd={p.Janela}:max_framerate={quadros}:capture_cursor=1:capture_border=0:display_border=1:width={largura}:height={altura}:resize_mode=scale_aspect,hwdownload,format=bgra[v]",
         "-map", "[v]", "-c:v", "rawvideo", "-pix_fmt", "bgra", "-threads", "1", "-fps_mode", "passthrough", "-f", "rawvideo", "-flush_packets", "1", "pipe:1"];
 
-    public async Task BombearAsync(NamedPipeServerStream cano, CancellationToken ct)
-    {
-        await cano.WaitForConnectionAsync(ct);
-        await _primeiro.Task.WaitAsync(TimeSpan.FromSeconds(12), ct);
-        byte[] quadro = new byte[_ultimo.Length];
-        long inicio = Stopwatch.GetTimestamp(), escritos = 0;
-        while (!ct.IsCancellationRequested)
-        {
-            if (_falha is { } falha) throw falha;
-            lock (_trava) _ultimo.CopyTo(quadro, 0);
-            await cano.WriteAsync(quadro, ct);
-            escritos++;
-            double espera = escritos * 1000.0 / _quadros - Stopwatch.GetElapsedTime(inicio).TotalMilliseconds;
-            if (espera > 0) await Task.Delay(TimeSpan.FromMilliseconds(espera), ct);
-            else if (espera < -200) { inicio = Stopwatch.GetTimestamp(); escritos = 0; }
-        }
-    }
-
-    public async ValueTask DisposeAsync()
+    public override async ValueTask DisposeAsync()
     {
         _parar.Cancel();
         _captura.Encerrar();

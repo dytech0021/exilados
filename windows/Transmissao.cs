@@ -31,6 +31,8 @@ internal sealed class Transmissao : IAsyncDisposable
     private Task _envio = Task.CompletedTask, _sinal = Task.CompletedTask;
     private readonly DateTime _inicio = DateTime.Now;
     private bool _gdi;
+    // A captura com HDR falhou nesta live: segue pela comum (estourada, mas no ar).
+    private bool _semHdr;
     private int _falhasDxgi;
     private long _quadrosEnviados;
 
@@ -153,8 +155,22 @@ internal sealed class Transmissao : IAsyncDisposable
         string endereco = $"rtsps://{_permissao.Usuario}:{_permissao.Senha}@{new Uri(_permissao.Rtsps.Replace("rtsps://", "https://")).Host}:{PortaMidia}/{_permissao.Caminho}";
         var (largura, altura) = TamanhoDeSaida(fonte.Area.Width, fonte.Area.Height, _opcoes.Altura);
         string nomeImagem = $"exilados-imagem-{Guid.NewGuid():N}";
-        using var canoImagem = _opcoes.Programa is null ? null : new NamedPipeServerStream(nomeImagem, PipeDirection.Out, 1, PipeTransmissionMode.Byte, PipeOptions.Asynchronous | PipeOptions.CurrentUserOnly, 0, 1 << 20);
-        await using var capturaPrograma = _opcoes.Programa is { } escolhido ? new CapturaPrograma(escolhido, largura, altura, _opcoes.Quadros) : null;
+        // Tela com HDR ligado: a captura comum corta o brilho e a live sai estourada; a própria converte para SDR.
+        double? brancoHdr = _semHdr ? null : Hdr.BrancoSdr(_opcoes.Programa is { } doPrograma ? Hdr.TelaDaJanela(doPrograma.Janela) : telas[indice].DeviceName);
+        CapturaQuadros? captura = null;
+        if (brancoHdr is { } branco)
+        {
+            try
+            {
+                captura = _opcoes.Programa is { } p ? CapturaHdr.DoPrograma(p, largura, altura, _opcoes.Quadros, branco)
+                    : CapturaHdr.DaTela(telas[indice], largura, altura, _opcoes.Quadros, branco);
+                fonte = fonte with { Nome = $"captura com HDR (branco {branco:0} nits)" };
+            }
+            catch (ExiladosException) { _semHdr = true; }
+        }
+        captura ??= _opcoes.Programa is { } escolhido ? new CapturaPrograma(escolhido, largura, altura, _opcoes.Quadros) : null;
+        await using var capturaImagem = captura;
+        using var canoImagem = captura is null ? null : new NamedPipeServerStream(nomeImagem, PipeDirection.Out, 1, PipeTransmissionMode.Byte, PipeOptions.Asynchronous | PipeOptions.CurrentUserOnly, 0, 1 << 20);
         Registro.Sessao($"live: capturando pelo {fonte.Nome} ({fonte.Area.Width}x{fonte.Area.Height}), enviando {largura}x{altura}");
         MudarSituacao("Conectando ao servidor...", false);
         using var processo = new ProcessoVideo(Argumentos(fonte, _opcoes, _codificador, nomeSom is null ? null : $@"\\.\pipe\{nomeSom}", endereco,
@@ -164,7 +180,7 @@ internal sealed class Transmissao : IAsyncDisposable
         // Só o som do programa precisa do Windows 11; no Windows 10 vai o som do computador (a live nunca sai muda).
         int processoDoSom = SomDePrograma.Disponivel ? _opcoes.Programa?.Processo ?? 0 : 0;
         var som = canoSom is null ? Task.CompletedTask : Task.Run(() => BombearSomAsync(canoSom, processoDoSom, parando.Token));
-        var imagem = capturaPrograma is null ? Task.CompletedTask : Task.Run(() => capturaPrograma.BombearAsync(canoImagem!, parando.Token));
+        var imagem = capturaImagem is null ? Task.CompletedTask : Task.Run(() => capturaImagem.BombearAsync(canoImagem!, parando.Token));
         _ = imagem.ContinueWith(_ => processo.Encerrar(), CancellationToken.None, TaskContinuationOptions.OnlyOnFaulted | TaskContinuationOptions.ExecuteSynchronously, TaskScheduler.Default);
         _ = som.ContinueWith(_ => processo.Encerrar(), CancellationToken.None, TaskContinuationOptions.OnlyOnFaulted | TaskContinuationOptions.ExecuteSynchronously, TaskScheduler.Default);
         Interlocked.Exchange(ref _quadrosEnviados, 0);
@@ -208,6 +224,11 @@ internal sealed class Transmissao : IAsyncDisposable
             catch (Exception ex) when (ex is OperationCanceledException or IOException or ObjectDisposedException or TimeoutException) { }
         }
         ct.ThrowIfCancellationRequested();
+        if (capturaImagem is CapturaHdr && (imagem.IsFaulted || parada))
+        {
+            _semHdr = true;
+            return imagem.IsFaulted ? imagem.Exception!.GetBaseException().Message : "a imagem da captura com HDR parou de sair";
+        }
         if (imagem.IsFaulted) return imagem.Exception!.GetBaseException().Message;
         if (som.IsFaulted) return som.Exception!.GetBaseException().Message;
         if (parada)
@@ -284,11 +305,11 @@ internal sealed class Transmissao : IAsyncDisposable
         var (w, h) = TamanhoDeSaida(a.Width, a.Height, o.Altura);
         string escala = $"scale={w}:{h}:flags=bicubic:out_color_matrix=bt709:out_range=tv,format=nv12";
         var args = new List<string> { "-hide_banner", "-loglevel", "error", "-nostdin", "-nostats", "-progress", "pipe:1" };
-        bool programa = o.Programa is not null;
-        bool filtroNaFonte = fonte.Dxgi && !programa;
-        if (programa)
+        // A imagem vem pronta por um cano (programa, ou tela com HDR) já no tamanho de saída.
+        if (o.Programa is not null && canoImagem is null) throw new InvalidDataException("A captura do programa precisa do seu fluxo de imagem.");
+        bool filtroNaFonte = fonte.Dxgi && canoImagem is null;
+        if (canoImagem is not null)
         {
-            if (canoImagem is null) throw new InvalidDataException("A captura do programa precisa do seu fluxo de imagem.");
             args.AddRange(["-f", "rawvideo", "-pixel_format", "bgra", "-video_size", $"{w}x{h}", "-framerate", N(o.Quadros), "-i", canoImagem]);
         }
         else if (fonte.Dxgi)

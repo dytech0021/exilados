@@ -41,6 +41,7 @@ internal static class Programa
         };
 
         if (Arg("--autoteste") is { } pasta) return AutoTeste.Rodar(pasta);
+        if (Arg("--teste-hdr") is { } pastaHdr) return TesteHdr.Rodar(pastaHdr);
         if (Arg("--captura-ui") is { } pastaImagens) return CapturarJanelas(pastaImagens);
         if (Arg("--captura-site") is { } pastaSite) return CapturarSite(pastaSite, Arg("--site"));
 
